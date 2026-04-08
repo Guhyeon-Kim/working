@@ -1,4 +1,3 @@
-```javascript
 /**
  * [글로벌] PreToolUse 훅: delegation_workflow.md §7 위임 품질 강제
  * 
@@ -155,4 +154,3 @@ process.stdin.on('end', () => {
 
   process.exit(0);
 });
-```
