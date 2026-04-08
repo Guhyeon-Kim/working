@@ -10,11 +10,11 @@
 ## 1. 권한 위계
 
 ```
-CEO (\uc720\uc800 \u2014 \uc544\uc774\ub514\uc5b4\xb7\ubc29\ud5a5 \uacb0\uc815)
- \u2514\u2500\u2500 Claude Code (Sr. CTO 15yr+ \u2014 \ucd5c\ucd08 \uc9c0\uc2dc, \ucd5c\uc885 \ud310\ub2e8, \uc624\ucf00\uc2a4\ud2b8\ub808\uc774\uc158)
-      \u251c\u2500\u2500 Gemini CLI  \u2192 \ub9ac\uc11c\uce58, \uae30\ud68d, \ub514\uc790\uc778 \ucd08\uc548 (\uac1c\ubc1c \uc678 \uc5c5\ubb34)
-      \u251c\u2500\u2500 Codex CLI   \u2192 \uc18c\uc2a4 \ucf54\ub4dc \uad6c\ud604 (\uac1c\ubc1c \uc5c5\ubb34)
-      \u2514\u2500\u2500 Plugin Agents \u2192 Gemini \ucd08\uc548 \uace0\ub3c4\ud654 + Codex 2\ucc28 \uac80\uc99d
+CEO (유저 — 아이디어·방향 결정)
+ └── Claude Code (Sr. CTO 15yr+ — 최초 지시, 최종 판단, 오케스트레이션)
+      ├── Gemini CLI  → 리서치, 기획, 디자인 초안 (개발 외 업무)
+      ├── Codex CLI   → 소스 코드 구현 (개발 업무)
+      └── Plugin Agents → Gemini 초안 고도화 + Codex 2차 검증
 ```
 
 ---
@@ -270,11 +270,11 @@ Gemini CLI → 초안 → CTO 고도화 → CEO 리뷰
 
 ```
 enforce-delegation.mjs:
-  personal → 기존 규칙 (3줄 이상 Codex 위임)
+  personal → 기존 규칙 (delegate.mjs 강제)
   team     → 동일 (위임 규칙은 프로젝트 유형과 무관)
   company  → 동일
 
-on-prompt.sh:
+on-prompt.mjs:
   personal → 기존 위험 감지
   team     → 기존 + "다른 팀원 파일 변경" 감지 (향후)
   company  → 기존 + 컴플라이언스 키워드 감지 (향후)
@@ -331,42 +331,136 @@ post-push-hook.mjs:
 | 설계(DB) | `supabase/*-migration.sql` | CEO(실행), security |
 | 설계(API) | `.claude/docs/api-spec.md` | frontend, backend, qa |
 | 설계(UI) | `.claude/docs/design-spec.md` | frontend |
+| 위임 패킷 | `.claude/delegation/*.md` | Codex, Gemini (감사 추적) |
 | 구현 | `frontend/src/`, `backend/app/` | 검증 단계 전체 |
 | 검증 | QA 리포트 (터미널) | CTO → CEO |
 | 보안 | `.claude/docs/security-report-*.md` | CTO |
 
 ---
 
-## 7. CLI 호출 표준
+## 7. CLI 호출 표준 (v2.0)
 
-### Gemini — 리서치/초안
+> v2.0 변경 사유: 기존 §7은 "어떻게 호출하는지"만 정의했고, "무엇을 넘기는지"는 CTO의
+> 즉흥 판단에 의존했다. 결과적으로 Codex/Gemini가 프로젝트 맥락 없이 작업하여
+> 산출물 품질이 일정하지 않았다.
+>
+> v2.0: delegate.mjs 래퍼를 통해 컨텍스트 패킷이 자동 조립된다.
+> CTO는 "무엇을 넘길지" 고민할 필요 없이, 작업 내용만 전달하면 된다.
 
-```bash
-gemini -p "
-[UTF-8 without BOM 필수. 한국어에 CP949/EUC-KR 사용 금지]
-{작업 내용}
-"
+### 원칙
+
+```
+[불변 규칙] CLI 직접 호출 금지. 반드시 delegate.mjs를 통해 호출한다.
+
+이유:
+  1. 컨텍스트 패킷 자동 조립 — API 명세, 디자인 명세, 반복 버그 레지스트리 등
+  2. 패킷 저장 — .claude/delegation/에 감사 추적용 자동 저장
+  3. 검증 — 필수 항목 누락 시 경고
+  4. 일관성 — CTO의 판단에 의존하지 않고 구조적으로 품질 보장
+
+enforce-delegation.mjs가 직접 호출을 차단하고 delegate.mjs 사용을 강제한다.
 ```
 
 ### Codex — 코드 구현
 
 ```bash
-# VSCode / Codespaces
-codex exec --full-auto -C frontend "{명세}"
-codex exec --full-auto -C backend "{명세}"
+# 프론트엔드
+node ~/.claude/scripts/delegate.mjs codex frontend "로그인 페이지 구현"
 
-# Firebase Studio (LandlockRestrict 우회)
-codex exec --dangerously-bypass-approvals-and-sandbox -C frontend "{명세}"
+# 백엔드
+node ~/.claude/scripts/delegate.mjs codex backend "stocks API 엔드포인트 구현"
+```
+
+**delegate.mjs가 자동으로 포함하는 컨텍스트:**
+
+| 항목 | 출처 | 조건 |
+|------|------|------|
+| 프로젝트 정보 | .claude/project-config.json | 항상 |
+| 작업 지시 | CTO가 전달한 task 인자 | 항상 |
+| API 명세 (관련 부분) | .claude/docs/api-spec.md | 파일 존재 시 |
+| 디자인 명세 (관련 부분) | .claude/docs/design-spec.md | frontend일 때 |
+| 와이어프레임 (관련 부분) | .claude/docs/wireframe.md | frontend일 때 |
+| 참조할 기존 코드 경로 | grep으로 자동 탐색 | 항상 |
+| 반복 버그 레지스트리 | agents/memory/failure-cases.md | 항상 |
+| 필수 코딩 규칙 | 내장 (UTF-8, async params 등) | 항상 |
+| 성공 패턴 (관련 부분) | agents/memory/success-patterns.md | 매칭 시 |
+
+### Gemini — 리서치/초안
+
+```bash
+# 리서치
+node ~/.claude/scripts/delegate.mjs gemini research "경쟁사 QR 결제 서비스 분석"
+
+# 디자인 초안
+node ~/.claude/scripts/delegate.mjs gemini design "대시보드 화면 초안"
+
+# 교육 콘텐츠
+node ~/.claude/scripts/delegate.mjs gemini education "행동재무학 입문 과정"
+
+# 마케팅
+node ~/.claude/scripts/delegate.mjs gemini marketing "런칭 카피라이팅"
+```
+
+**delegate.mjs가 자동으로 포함하는 컨텍스트:**
+
+| 항목 | 출처 | 조건 |
+|------|------|------|
+| 프로젝트 정보 | .claude/project-config.json | 항상 |
+| 작업 지시 | CTO가 전달한 task 인자 | 항상 |
+| 기대 산출물 형식 | target별 내장 템플릿 | 항상 |
+| 기존 리서치 요약 (중복 방지) | .claude/docs/gemini-draft.md | research일 때 |
+| 디자인 가이드 | .claude/docs/design-guide-v2.md | design일 때 |
+| 프로젝트 요구사항 요약 | .claude/docs/requirements.md | 파일 존재 시 |
+| 인코딩 규칙 | 내장 (UTF-8 필수 등) | 항상 |
+
+### 패킷 감사 추적
+
+```
+모든 위임 호출의 패킷은 자동 저장된다:
+  .claude/delegation/codex-frontend-2026-04-08T14-30-00.md
+  .claude/delegation/gemini-research-2026-04-08T14-35-00.md
+
+용도:
+  - 위임 품질 사후 분석
+  - "왜 이렇게 나왔지?" → 패킷을 보면 원인 파악 가능
+  - 패킷 템플릿 개선의 근거
 ```
 
 ### Codex 필수 지시어
 
 ```
-모든 파일은 UTF-8 without BOM으로 저장.
-한국어 문자열은 유니코드 이스케이프: '\uc804\ub7b5'
-async params 패턴 필수 (Next.js 15+).
-TypeScript any 금지, unknown + 타입 가드.
-파일 읽기 시 전체 읽기 금지 — offset/limit 또는 grep으로 필요 범위만 읽을 것.
+delegate.mjs가 모든 Codex 호출에 자동 포함하는 규칙:
+
+  모든 파일은 UTF-8 without BOM으로 저장.
+  한국어 문자열은 유니코드 이스케이프: '\uc804\ub7b5'
+  async params 패턴 필수 (Next.js 15+).
+  TypeScript any 금지, unknown + 타입 가드.
+  파일 읽기 시 전체 읽기 금지 — offset/limit 또는 grep으로 필요 범위만 읽을 것.
+```
+
+### 폴백 (CLI 불가 시)
+
+```
+delegate.mjs는 CLI 가용성을 직접 체크하지 않는다.
+CLI 불가 상태는 기존대로 cli-health-check.mjs + enforce-delegation.mjs가 관리.
+
+CLI 불가 시 흐름:
+  1. cli-health-check.mjs → cli-status.json에 불가 기록
+  2. enforce-delegation.mjs → 차단 우회, CTO 직접 수행 허용
+  3. CTO가 직접 수행하되, delegate.mjs가 조립했을 패킷의 내용을
+     수동으로 참조해야 한다 (api-spec, failure-cases 등)
+```
+
+### [폐기] 직접 호출 방식
+
+```
+[v1.0 — 폐기됨]
+다음 방식은 더 이상 사용하지 않는다:
+
+  ❌ codex exec --full-auto -C frontend "{명세}"
+  ❌ gemini -p "{작업 내용}"
+
+이유: 컨텍스트 패킷이 CTO의 즉흥 판단에 의존하여 품질 편차가 컸다.
 ```
 
 ---
@@ -422,7 +516,7 @@ UserPromptSubmit
 
 PreToolUse (Bash|Write|Edit)
   → enforce-delegation.mjs: cli-status.json 확인
-  → CLI 정상: 기존 위임 규칙 적용 (차단)
+  → CLI 정상: delegate.mjs 강제 (직접 호출 차단)
   → CLI 불가: 차단 우회 + 폴백 경고
     - Rule 1,2: gemini/codex 직접 호출 허용
     - Rule 4: 코드 줄 임계값 3줄 → 50줄로 완화
@@ -573,7 +667,7 @@ CEO "됐어요" / "좋아" 확인 시:
 ```
 evolving-rules.json에서 count >= 3인 패턴 발견
   → evolving-guardrails.mjs가 stderr로 등재 제안
-  → CTO가 위 테이블에 추가 + Codex 지시어(§7)에 반영
+  → CTO가 위 테이블에 추가 + delegate.mjs 코딩 규칙에 반영
   → /hookify:hookify로 PreToolUse 차단 규칙 생성
   → evolving-rules.json에서 hookified: true 마킹
 ```
@@ -593,6 +687,7 @@ evolving-rules.json에서 count >= 3인 패턴 발견
   ✅ 작업에 필요한 파일 경로만 명시
   ✅ 산출물은 파일로 저장 후 경로만 반환
   ✅ 구조화된 요약만 상위로 전달
+  ✅ 외부 CLI(Codex/Gemini)는 delegate.mjs가 패킷을 자동 조립
   ❌ 원시 데이터(전체 파일 내용, 로그 덤프) 직접 전달 금지
   ❌ 이전 단계의 대화 히스토리 전달 금지
 
@@ -600,6 +695,11 @@ Agent 호출 예시:
   Agent(prompt="api-spec.md 기준으로 /stocks 엔드포인트 구현. 산출물: backend/app/routers/stocks.py")
   → 필요한 파일 경로 + 산출물 경로만 전달
   → 에이전트가 직접 파일을 읽어서 작업
+
+외부 CLI 위임 예시:
+  node ~/.claude/scripts/delegate.mjs codex backend "stocks API 엔드포인트 구현"
+  → delegate.mjs가 api-spec.md, failure-cases.md 등을 자동 조립
+  → Codex에 패킷과 함께 전달
 ```
 
 ### 14-2. 외과적 도구 사용 (Surgical Tool Use)
@@ -617,7 +717,7 @@ Agent 호출 예시:
   ✅ Grep("functionName") → 정의 위치만
   ❌ ls -R / find . 전체 트리 덤프
 
-Codex 지시어에도 동일 원칙 적용 (§7 참조).
+delegate.mjs도 동일 원칙 적용 — 관련 섹션만 발췌하여 패킷에 포함.
 ```
 
 ### 14-3. 단계 전환 규칙 (Managed History)
@@ -676,6 +776,9 @@ Codex 지시어에도 동일 원칙 적용 (§7 참조).
 
 5. Over-delegation: 5줄 수정에 서브에이전트 3개 호출
    → 오버헤드 > 이득. 단순 작업은 CTO가 직접 수행.
+
+6. Naked CLI Call: delegate.mjs 없이 codex/gemini를 직접 호출
+   → 컨텍스트 누락. 반드시 delegate.mjs를 통해 호출. (§7 참조)
 ```
 
 ---
@@ -756,7 +859,7 @@ UserPromptSubmit
 
 PreToolUse
   → enforce-delegation.mjs: cli-status.json 참조
-  → CLI 정상: 기존 위임 규칙 (차단)
+  → CLI 정상: delegate.mjs 강제 (직접 호출 차단)
   → CLI 불가: 차단 우회 + 코드 임계값 3줄 → 50줄 완화
   → 다음 세션에서 자동 복원 (매 세션 재체크)
 ```
@@ -766,9 +869,9 @@ PreToolUse
 ```
 UserPromptSubmit ──→ cli-health-check.mjs   (CLI 가용성)
                  ──→ quality-gc.mjs          (GC 스캔)
-                 ──→ on-prompt.sh            (작업 기록, 위험 감지)
+                 ──→ on-prompt.mjs           (작업 기록, 위험 감지)
 
-PreToolUse ───────→ enforce-delegation.mjs   (위임 규칙 + 폴백)
+PreToolUse ───────→ enforce-delegation.mjs   (delegate.mjs 강제 + 폴백)
 
 PostToolUse(Bash) → acl-post-build.mjs       (자동 교정 루프)
                   → post-push-hook.mjs       (배포 후 점검)
@@ -788,4 +891,5 @@ evolving-rules.json ←── evolving-guardrails.mjs (읽기/쓰기) ──→ 
 cli-status.json ←── cli-health-check.mjs (쓰기) ──→ enforce-delegation.mjs (읽기)
 gc-state.json ←── quality-gc.mjs (읽기/쓰기)
 gc-report.md ←── quality-scan.mjs (stdout) ←── quality-gc.mjs (저장)
+delegation/*.md ←── delegate.mjs (쓰기) ──→ 감사 추적·패킷 개선 근거
 ```
