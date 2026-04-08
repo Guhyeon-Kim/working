@@ -85,7 +85,7 @@ const RETRY_FORBIDDEN = [400, 401, 403, 404, 422]
 
 // 로딩 실패 (데이터 없음)
 <div className="text-center py-8 space-y-3">
-  <p className="text-hw-text-muted">{errorMessage}</p>
+  <p className="text-muted">{errorMessage}</p>
   <Button variant="outline" onClick={retry} size="sm">
     다시 시도
   </Button>
@@ -93,7 +93,7 @@ const RETRY_FORBIDDEN = [400, 401, 403, 404, 422]
 
 // 전체 페이지 에러
 <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
-  <p className="text-lg text-hw-text-secondary">{errorMessage}</p>
+  <p className="text-lg text-secondary">{errorMessage}</p>
   <div className="flex gap-3">
     <Button onClick={retry}>다시 시도</Button>
     <Button variant="outline" onClick={() => router.back()}>이전으로</Button>
@@ -102,7 +102,7 @@ const RETRY_FORBIDDEN = [400, 401, 403, 404, 422]
 
 // 빈 상태 (에러가 아닌 데이터 없음)
 <div className="text-center py-12 space-y-3">
-  <p className="text-hw-text-muted">{emptyMessage}</p>
+  <p className="text-muted">{emptyMessage}</p>
   <Button onClick={onAction}>{actionLabel}</Button>
 </div>
 ```
@@ -116,7 +116,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 import logging, json
 
-logger = logging.getLogger("hubwise")
+logger = logging.getLogger(__name__)
 
 # 전역 에러 핸들러
 @app.exception_handler(Exception)

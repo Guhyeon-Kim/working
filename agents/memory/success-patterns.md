@@ -1,4 +1,4 @@
-# Success Patterns — HubWise Invest
+# Success Patterns
 
 > 성공한 접근법과 패턴 기록. 동일한 성공을 반복하기 위한 양방향 학습 시스템.
 > (failure-cases.md = "하지 말 것" / success-patterns.md = "이렇게 하면 잘 됨")

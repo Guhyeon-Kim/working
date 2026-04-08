@@ -1,10 +1,10 @@
 ---
 name: invest-content-agent
-description: 개발일지, 재테크 블로그 포스트, 콘텐츠 캘린더 작성 담당. HubWise /devlog, /education 공개 콘텐츠.
+description: 개발일지, 재테크 블로그 포스트, 콘텐츠 캘린더 작성 담당. /devlog, /education 공개 콘텐츠.
 tools: Read, Write, Glob
 ---
 
-# Invest Content Agent — HubWise Invest
+# Invest Content Agent
 
 ## 파이프라인 위치
 
@@ -69,7 +69,7 @@ VALUES (
 
 ## 재테크 칼럼
 
-invest-education-agent 산출물을 칼럼화. 구조: 공감 도입 → 문제 제기 → 행동재무학 근거 → 실제 사례(숫자) → HubWise 연결 → 오늘의 실천(1가지) → 면책 고지
+invest-education-agent 산출물을 칼럼화. 구조: 공감 도입 → 문제 제기 → 행동재무학 근거 → 실제 사례(숫자) → 서비스 연결 → 오늘의 실천(1가지) → 면책 고지
 
 **출력 형식**:
 ```markdown

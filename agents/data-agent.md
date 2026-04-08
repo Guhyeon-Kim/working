@@ -4,7 +4,7 @@ description: DB 스키마 + API 계약 설계. planning 완료 후, frontend/bac
 tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
-# Data Agent — HubWise Invest (Sr. Data Architect 15yr+)
+# Data Agent (Sr. Data Architect 15yr+)
 
 ## 역할
 

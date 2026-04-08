@@ -49,6 +49,7 @@ git branch                      # 현재 브랜치
 □ 기존 CLAUDE.md: 있음/없음
 □ 기존 project-log.md: 있음/없음
 □ 기존 .claude/docs/: 있음/없음 (있으면 내용 파악)
+□ .claude/docs/design-system.md: 있음/없음 (없으면 design-system 스킬로 생성 안내)
 □ 마지막 커밋: [날짜 + 메시지]
 □ 미완성 작업: git status 기반
 □ 환경변수 파일: [있음/없음 — 내용 열람 금지]
@@ -150,13 +151,6 @@ git branch                      # 현재 브랜치
 
 ### Step 4: 환경 검증
 
-HubWise 프로젝트인 경우:
-```bash
-gemini -p "respond with exactly: GEMINI_OK"
-codex exec --full-auto "echo CODEX_FULL_AUTO_OK"
-```
-
-범용 프로젝트인 경우:
 ```bash
 # 의존성 설치 상태 확인
 ls node_modules 2>/dev/null && echo "npm installed" || echo "npm NOT installed"

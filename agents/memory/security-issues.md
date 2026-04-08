@@ -1,4 +1,4 @@
-# Security Issues — HubWise Invest
+# Security Issues
 
 > 발견된 보안 이슈 및 해결 패턴. 보안 감사 시 우선 참조.
 

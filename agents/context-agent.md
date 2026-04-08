@@ -4,7 +4,7 @@ description: 프로젝트 상태 관리, project-log 갱신, 의사결정 기록
 tools: Read, Write, Edit, Glob
 ---
 
-# Context Agent — HubWise Invest (Sr. Technical Writer 15yr+)
+# Context Agent (Sr. Technical Writer 15yr+)
 
 ## 역할
 

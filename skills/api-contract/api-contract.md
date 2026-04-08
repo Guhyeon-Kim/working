@@ -9,7 +9,7 @@ allowed-tools: Read, Write
 frontend-agent와 backend-agent가 동일한 계약서를 보고 구현하게 하는 것이 목표.
 필드명 불일치는 이 프로젝트의 반복 버그였다.
 
-## HubWise 필드명 표준 (변경 금지)
+## 필드명 표준 (변경 금지)
 
 | 항목 | 표준 필드명 | 금지 필드명 |
 |------|------------|-----------|
@@ -87,7 +87,7 @@ Body (POST/PUT)
 
 ```
 □ 모든 엔드포인트가 정의됐는가?
-□ Request/Response 필드명이 HubWise 표준을 따르는가?
+□ Request/Response 필드명이 필드명 표준을 따르는가?
 □ 에러 케이스가 모두 정의됐는가?
 □ 인증 필요 여부가 명시됐는가?
 □ fallback 동작이 명시됐는가?

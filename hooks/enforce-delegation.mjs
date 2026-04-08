@@ -33,6 +33,14 @@ process.stdin.on('end', () => {
   const toolInput = input.tool_input || {};
   const cliStatus = loadCliStatus();
 
+  // Rule 0: delegate.mjs를 통한 호출은 항상 허용
+  if (toolName === 'Bash') {
+    const cmd = (toolInput.command || '');
+    if (cmd.includes('delegate.mjs')) {
+      process.exit(0);
+    }
+  }
+
   // Rule 1: Block direct gemini CLI calls (폴백: gemini 불가 시 우회)
   if (toolName === 'Bash') {
     const cmd = (toolInput.command || '').toLowerCase();
@@ -104,7 +112,7 @@ process.stdin.on('end', () => {
     if (isCode) {
       const newContent = toolInput.content || toolInput.new_string || '';
       const lines = newContent.split('\n').filter(l => l.trim().length > 0);
-      const threshold = cliStatus.codex === false ? 50 : 3;
+      const threshold = cliStatus.codex === false ? 50 : 10;
       if (lines.length > threshold) {
         process.stderr.write(
           `[위임 규칙 위반] 코드 ${lines.length}줄 직접 작성 시도 (임계값: ${threshold}줄). ` +

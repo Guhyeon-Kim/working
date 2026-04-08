@@ -121,16 +121,111 @@ async function main() {
     messages.push('  \u2192 \uc6b0\uc120 \ud574\uacb0 \uad8c\uc7a5.');
   }
 
+  // 6. pending-hookify.json — hookify 자동 트리거
+  const pendingHookifyPath = join(claudeDir, 'pending-hookify.json');
+  try {
+    if (existsSync(pendingHookifyPath)) {
+      const pending = JSON.parse(readFileSync(pendingHookifyPath, 'utf8'));
+      if (Array.isArray(pending) && pending.length > 0) {
+        messages.push(`\uD83D\uDEA8 [hookify \uD544\uC218] \uBC18\uBCF5 \uC5D0\uB7EC ${pending.length}\uAC74\uC774 \uCC28\uB2E8 \uADDC\uCE59 \uC0DD\uC131 \uB300\uAE30 \uC911:`);
+        for (const p of pending.slice(0, 5)) {
+          messages.push(`  - "${p.id}" (${p.count}\uD68C) \u2014 /hookify:hookify \uB85C \uCC28\uB2E8 \uADDC\uCE59 \uC0DD\uC131 \uC2DC\uAE09`);
+        }
+        messages.push('  \u2192 \uC138\uC158 \uCD08\uBC18\uC5D0 /hookify:hookify \uC2E4\uD589\uC744 \uAC15\uB825 \uAD8C\uC7A5\uD569\uB2C8\uB2E4.');
+      }
+    }
+  } catch { /* ignore */ }
+
   // 출력
   if (messages.length > 0) {
-    process.stderr.write('\n=== \uc138\uc158 \uba54\ubaa8\ub9ac \ub85c\ub4dc (v5.2) ===\n');
+    process.stderr.write('\n=== \uC138\uC158 \uBA54\uBAA8\uB9AC \uB85C\uB4DC (v6.0) ===\n');
     for (const msg of messages) {
       process.stderr.write(msg + '\n');
     }
     process.stderr.write('================================\n\n');
   }
 
+  // 7. 헬스 대시보드 생성 (.claude/health-dashboard.md)
+  generateHealthDashboard(messages, claudeDir);
+
   process.exit(0);
+}
+
+function generateHealthDashboard(messages, claudeDir) {
+  const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  const lines = [`# Health Dashboard`, ``, `> \uC790\uB3D9 \uC0DD\uC131: ${now} (UTC)`, ``];
+
+  // 빌드 상태
+  const buildCachePath = join(claudeDir, 'build-cache.json');
+  try {
+    if (existsSync(buildCachePath)) {
+      const cache = JSON.parse(readFileSync(buildCachePath, 'utf8'));
+      lines.push(`## \uBE4C\uB4DC \uC0C1\uD0DC: \u2705 PASS`);
+      lines.push(`- \uB9C8\uC9C0\uB9C9 \uC131\uACF5: ${cache.passedAt || 'unknown'}`);
+      lines.push(`- \uC5D0\uC774\uC804\uD2B8: ${cache.agent || 'unknown'}`);
+    } else {
+      lines.push(`## \uBE4C\uB4DC \uC0C1\uD0DC: \u2753 \uBBF8\uD655\uC778`);
+    }
+  } catch {
+    lines.push(`## \uBE4C\uB4DC \uC0C1\uD0DC: \u2753 \uBBF8\uD655\uC778`);
+  }
+  lines.push('');
+
+  // 반복 에러
+  const rulesPath = join(claudeDir, 'agents', 'memory', 'evolving-rules.json');
+  try {
+    if (existsSync(rulesPath)) {
+      const rules = JSON.parse(readFileSync(rulesPath, 'utf8'));
+      const active = (rules.patterns || []).filter(p => !p.archived);
+      const critical = active.filter(p => p.count >= 3);
+      lines.push(`## \uBC18\uBCF5 \uC5D0\uB7EC: ${active.length}\uAC74 \uD65C\uC131 (${critical.length}\uAC74 \uC2EC\uAC01)`);
+      for (const r of critical.slice(0, 5)) {
+        lines.push(`- \uD83D\uDEA8 ${r.id} (${r.count}\uD68C, \uCD5C\uADFC: ${r.lastSeen})`);
+      }
+    }
+  } catch { /* ignore */ }
+  lines.push('');
+
+  // 품질 GC
+  const gcStatePath = join(claudeDir, 'gc-state.json');
+  try {
+    if (existsSync(gcStatePath)) {
+      const gc = JSON.parse(readFileSync(gcStatePath, 'utf8'));
+      lines.push(`## \uD488\uC9C8 GC: \uB9C8\uC9C0\uB9C9 ${gc.lastRun || 'unknown'}`);
+    }
+  } catch { /* ignore */ }
+  lines.push('');
+
+  // CLI 상태
+  const cliStatusPath = join(claudeDir, 'cli-status.json');
+  try {
+    if (existsSync(cliStatusPath)) {
+      const cli = JSON.parse(readFileSync(cliStatusPath, 'utf8'));
+      const codexIcon = cli.codex ? '\u2705' : '\u274C';
+      const geminiIcon = cli.gemini ? '\u2705' : '\u274C';
+      lines.push(`## CLI \uC0C1\uD0DC: Codex ${codexIcon} | Gemini ${geminiIcon}`);
+    }
+  } catch { /* ignore */ }
+  lines.push('');
+
+  // pending hookify
+  const pendingPath = join(claudeDir, 'pending-hookify.json');
+  try {
+    if (existsSync(pendingPath)) {
+      const pending = JSON.parse(readFileSync(pendingPath, 'utf8'));
+      if (Array.isArray(pending) && pending.length > 0) {
+        lines.push(`## Hookify \uB300\uAE30: ${pending.length}\uAC74`);
+        for (const p of pending) {
+          lines.push(`- ${p.id} (${p.count}\uD68C)`);
+        }
+      }
+    }
+  } catch { /* ignore */ }
+
+  const dashboardPath = join(claudeDir, 'health-dashboard.md');
+  try {
+    writeFileSync(dashboardPath, lines.join('\n') + '\n', 'utf8');
+  } catch { /* ignore */ }
 }
 
 main().catch(() => process.exit(0));

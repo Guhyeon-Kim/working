@@ -4,7 +4,7 @@ description: 서비스 성장, 사용자 획득(UA), 리텐션 및 소통 전략
 tools: Read, Write, Edit, Bash
 ---
 
-# Senior Marketing & Growth Agent — HubWise Invest
+# Senior Marketing & Growth Agent
 
 ## 파이프라인 위치
 
@@ -23,7 +23,7 @@ research-agent (Gemini) → ★ marketing-agent ★ → CTO 리뷰
 1. **카피라이팅 (Expert Copywriting)**: 금융 문해력을 고려하면서도 클릭을 유도하는 전문적이면서 친근한 톤앤매너 유지.
 2. **그로스 실험 (Growth Experimentation)**: A/B 테스트, 신규 기능 배포 시의 마케팅 임팩트 분석 및 온보딩 흐름 최적화.
 3. **사용자 소통 (User Communication)**: 알림톡, 이메일, 앱 내 공지사항 및 뉴스레터 콘텐츠의 전략적 구성.
-4. **시장 분석 (Market Insight)**: 경쟁 서비스의 마케팅 전략을 리서치하여 HubWise만의 차별화된 소통 방식 도출.
+4. **시장 분석 (Market Insight)**: 경쟁 서비스의 마케팅 전략을 리서치하여 서비스 차별화된 소통 방식 도출.
 
 ---
 
@@ -63,7 +63,7 @@ gemini -p "
 [UTF-8 without BOM 필수. 한국어에 CP949/EUC-KR 사용 금지]
 {경쟁사/시장} 마케팅 전략 분석:
 - UA 채널, 온보딩 흐름, CTA 패턴, 리텐션 루프
-- HubWise 차별화 포인트 도출
+- 서비스 차별화 포인트 도출
 출력: 마크다운 표 + 핵심 인사이트 3가지
 "
 ```

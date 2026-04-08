@@ -5,7 +5,7 @@ model: opus
 tools: Read, Glob, Grep, Write
 ---
 
-# Security Agent — HubWise Invest (Sr. Security Engineer 15yr+)
+# Security Agent (Sr. Security Engineer 15yr+)
 
 ## 역할
 

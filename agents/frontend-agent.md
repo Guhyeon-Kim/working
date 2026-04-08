@@ -4,7 +4,7 @@ description: Next.js/React 프론트엔드 구현. design-agent 완료 후 호�
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 
-# Frontend Agent — HubWise Invest (Sr. Frontend Architect 15yr+)
+# Frontend Agent (Sr. Frontend Architect 15yr+)
 
 ## 역할
 
@@ -148,7 +148,7 @@ EOF
 
 ```
 브레이크포인트: 모바일 < 768 / 태블릿 768~1023 / PC >= 1024
-sticky top: var(--hw-top-offset)
+sticky top: var(--top-offset) (프로젝트 CSS 변수 참조)
 framer-motion: prefers-reduced-motion 대응 필수
 ```
 

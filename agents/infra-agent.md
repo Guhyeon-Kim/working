@@ -4,7 +4,7 @@ description: 인프라 비용/성능 분석. Supabase/Cloud Run/Vercel 80% 임�
 tools: Read, Glob, Grep, Write
 ---
 
-# Infra Agent — HubWise Invest (Sr. SRE 15yr+)
+# Infra Agent (Sr. SRE 15yr+)
 
 ## 역할
 

@@ -221,6 +221,23 @@ function handleStop() {
     rules.patterns = rules.patterns.slice(0, 100);
   }
 
+  // pending-hookify.json: count >= 3 패턴 자동 등재 (다음 세션에서 hookify 강제 프롬프트)
+  const hookifyCandidates = rules.patterns.filter(r => !r.archived && !r.hookified && r.count >= 3);
+  if (hookifyCandidates.length > 0) {
+    const pendingPath = path.join(cwd, '.claude', 'pending-hookify.json');
+    const pending = [];
+    for (const c of hookifyCandidates) {
+      pending.push({
+        id: c.id,
+        pattern: c.pattern,
+        count: c.count,
+        firstSeen: c.firstSeen,
+        suggestedRule: `${c.id} 패턴 반복 ${c.count}회 — PreToolUse 차단 규칙 필요`,
+      });
+    }
+    fs.writeFileSync(pendingPath, JSON.stringify(pending, null, 2) + '\n', 'utf8');
+  }
+
   // 저장
   fs.writeFileSync(
     rulesPath,

@@ -16,53 +16,52 @@ description: UI 컴포넌트 설계 및 구현이 필요할 때 자동 로드. s
 ## 기술 스택
 
 - UI 라이브러리: shadcn/ui (Context7 MCP로 최신 API 확인 후 구현)
-- 스타일링: Tailwind CSS + CSS 변수(`--hw-*`)
+- 스타일링: Tailwind CSS + 프로젝트 디자인 시스템 CSS 변수
 - 아이콘: Lucide React
 - 차트: Recharts (항상 dynamic import)
 - 애니메이션: Framer Motion (복잡한 경우만 — 기본 transition은 Tailwind)
 
 ---
 
-## HubWise Design System v2.0.0
+## 프로젝트 디자인 시스템
 
-> 전체 명세: `docs/planning/05-design-system.md`
+> **단일 소스**: `.claude/docs/design-system.md`
+> 이 파일이 없으면 design-system 스킬로 먼저 생성해야 한다.
+> 아래는 CSS 변수 사용 패턴 예시이며, 실제 변수명과 값은 design-system.md를 따른다.
 
 ### 컬러 토큰 (CSS 변수 필수 — 하드코딩 절대 금지)
 
+프로젝트 디자인 시스템에 정의된 CSS 변수를 사용한다. 일반적으로 다음과 같은 범주의 변수가 필요하다:
+
 ```css
 /* 배경 */
---hw-bg              /* 앱 기본 배경 */
---hw-surface         /* 카드/패널 배경 */
---hw-surface-2       /* 중첩 카드 배경 */
+--bg              /* 앱 기본 배경 */
+--surface         /* 카드/패널 배경 */
+--surface-2       /* 중첩 카드 배경 */
 
 /* 브랜드 */
---hw-navy            /* 주 브랜드 (다크 네이비) */
---hw-emerald         /* 보조 브랜드 (에메랄드) — 구 --hw-green 대체 */
+--primary         /* 주 브랜드 색상 */
+--secondary       /* 보조 브랜드 색상 */
 
 /* 텍스트 */
---hw-text            /* 본문 */
---hw-text-secondary  /* 보조 텍스트 */
---hw-text-muted      /* 비활성/설명 */
+--text            /* 본문 */
+--text-secondary  /* 보조 텍스트 */
+--text-muted      /* 비활성/설명 */
 
 /* 경계 */
---hw-border          /* 기본 경계선 */
---hw-card-shadow     /* 카드 그림자 */
+--border          /* 기본 경계선 */
+--card-shadow     /* 카드 그림자 */
 
 /* 상태 */
---hw-success         /* 수익/긍정 */
---hw-danger          /* 손실/위험 */
---hw-warning         /* 주의 */
+--success         /* 수익/긍정 */
+--danger          /* 손실/위험 */
+--warning         /* 주의 */
 ```
-
-**레거시 변수 사용 금지**: `--hw-green`, `--hw-coral` → 각각 `--hw-emerald`, `--hw-danger`로 교체
 
 ### 레이아웃 기준
 
 ```
-maxWidth
-  - content-area: 1040px (wide 레이아웃 — 종목탐색, 대시보드)
-  - 읽기 영역: 720px (교육 콘텐츠, 블로그)
-  - 일반: 800px
+maxWidth: 프로젝트 레이아웃 기준 참조
 
 간격: 8px grid (8/12/16/20/24/32/48/64/80/96px)
 반응형: mobile-first
@@ -73,8 +72,7 @@ maxWidth
 ### 타이포그래피
 
 ```
-본문: Pretendard
-랜딩 히어로: Plus Jakarta Sans
+본문: 프로젝트 지정 폰트
 폰트 스케일: text-xs(12) / text-sm(14) / text-base(16) / text-lg(18) / text-xl(20) / text-2xl(24) / text-3xl(30)
 ```
 
@@ -123,7 +121,7 @@ export const ComponentName = React.forwardRef<HTMLDivElement, ComponentProps>(
         aria-label="[컴포넌트 설명]"
         aria-busy={isLoading}
         className={cn(
-          'rounded-lg border border-[--hw-border] bg-[--hw-surface]',
+          'rounded-lg border border-[--border] bg-[--surface]',
           variant === 'outline' && 'border-2',
           size === 'sm' && 'p-3',
           size === 'md' && 'p-4',
@@ -147,7 +145,7 @@ ComponentName.displayName = 'ComponentName'
 const PriceChange = ({ value }: { value: number }) => (
   <span className={cn(
     'font-medium tabular-nums',
-    value > 0 ? 'text-[--hw-success]' : value < 0 ? 'text-[--hw-danger]' : 'text-[--hw-text-muted]'
+    value > 0 ? 'text-[--success]' : value < 0 ? 'text-[--danger]' : 'text-[--text-muted]'
   )}>
     {value > 0 ? '+' : ''}{value.toFixed(2)}%
   </span>
@@ -181,14 +179,14 @@ export function DataCard<T>({
 
   if (error) return (
     <div className="flex flex-col items-center gap-3 py-8 text-center">
-      <p className="text-sm text-[--hw-text-muted]">데이터를 불러올 수 없습니다</p>
+      <p className="text-sm text-[--text-muted]">데이터를 불러올 수 없습니다</p>
       <Button variant="outline" size="sm" onClick={onRetry}>다시 시도</Button>
     </div>
   )
 
   if (isEmpty || !data) return (
     <div className="flex flex-col items-center gap-3 py-12 text-center">
-      <p className="text-sm text-[--hw-text-muted]">{emptyMessage}</p>
+      <p className="text-sm text-[--text-muted]">{emptyMessage}</p>
       {emptyAction && (
         <Button size="sm" onClick={emptyAction.onClick}>{emptyAction.label}</Button>
       )}
@@ -234,7 +232,6 @@ export function DataCard<T>({
 ```
 ❌ 인라인 style 속성 — className 사용
 ❌ 하드코딩 색상 (#1A1A2E 등) — CSS 변수 사용
-❌ 레거시 변수 (--hw-green, --hw-coral) — v2.0.0 변수로 교체
 ❌ Props 5개 초과 설계 — Context 또는 Composition 패턴
 ❌ 데이터 없음 시 null 반환 — Empty State 필수
 ❌ 에러 시 null 반환 — 에러 UI + 재시도 버튼 필수
@@ -247,7 +244,7 @@ export function DataCard<T>({
 
 ```
 □ shadcn/ui 우선 확인 후 필요 시만 커스텀 구현
-□ CSS 변수 v2.0.0 기준 사용 (레거시 변수 없음)
+□ 프로젝트 디자인 시스템 CSS 변수 사용
 □ 5-State 모두 구현 (기본/로딩/빈/에러/부분실패)
 □ aria 속성 완비
 □ 모바일 44px 터치 영역 확보

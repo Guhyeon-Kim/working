@@ -22,7 +22,7 @@ allowed-tools: Read, Grep
 ```
 □ research.md에 저장했는가?
 □ 최소 3개 이상 소스를 확인했는가?
-□ HubWise 적용 제안 섹션이 있는가?
+□ 서비스 적용 제안 섹션이 있는가?
 □ 출처가 명시됐는가?
 ```
 
@@ -47,7 +47,7 @@ allowed-tools: Read, Grep
 ## data-agent
 ```
 □ api-spec.md에 저장했는가?
-□ 모든 필드명이 HubWise 표준(snake_case, price/change_rate)을 따르는가?
+□ 모든 필드명이 프로젝트 표준(snake_case)을 따르는가?
 □ 에러 케이스가 정의됐는가?
 □ RLS 정책이 포함됐는가?
 ```

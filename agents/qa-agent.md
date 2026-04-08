@@ -200,9 +200,8 @@ PC(1280px) + 모바일(390px) 확인.
 
 ```
 □ 레이아웃 깨짐 / 텍스트 잘림
-□ 색상: --hw-navy #0F172A / --hw-green #2563EB / --hw-bg #F8FAFC
-□ 금지 색상 잔존: #10B981, #00D48A, #FF7E5F
-□ content-area(1440px) 단일 기준 / 인라인 maxWidth 오버라이드 없음
+□ 색상: 프로젝트 디자인 시스템의 CSS 변수 참조
+□ 인라인 maxWidth 오버라이드 없음
 □ 터치 영역 44px / 빈상태 UI / skeleton
 ```
 

@@ -1,4 +1,4 @@
-# Cost Optimization — HubWise Invest
+# Cost Optimization
 
 > 비용 절감 사례 및 적용 기준. 인프라 비용 관련 의사결정 근거로 활용.
 

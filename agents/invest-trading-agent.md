@@ -4,7 +4,7 @@ description: 종목/ETF 분석, 매매 전략 수립. WHY+RISK+CONDITION/EXIT �
 tools: Read, Write, Bash
 ---
 
-# Trading Agent — HubWise Invest (Sr. Quant Analyst 15yr+)
+# Trading Agent (Sr. Quant Analyst 15yr+)
 
 ## 역할
 

@@ -1,4 +1,4 @@
-# Failure Cases — HubWise Invest
+# Failure Cases
 
 > 장애/실패 사례 및 원인, 해결책. 동일 실패 반복 방지용.
 

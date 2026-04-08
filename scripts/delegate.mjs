@@ -298,7 +298,7 @@ function validatePacket(packet, cli, target) {
 
 // ─── 실행 ───
 
-function main() {
+async function main() {
   // 패킷 조립
   let packet;
   if (cli === 'codex') {
@@ -318,10 +318,8 @@ function main() {
   }
   
   // 패킷 저장 (감사/디버깅용)
-  try {
-    const { mkdirSync } = await import('fs').then(m => m);
-    mkdirSync(DELEGATION_DIR, { recursive: true });
-  } catch {}
+  const { mkdirSync } = await import('fs');
+  mkdirSync(DELEGATION_DIR, { recursive: true });
   
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const packetPath = join(DELEGATION_DIR, `${cli}-${target}-${timestamp}.md`);
@@ -354,15 +352,80 @@ function main() {
       writeFileSync(join(DOCS_DIR, 'gemini-draft.md'), result, 'utf8');
       console.log(`[delegate] Gemini 결과 저장: ${join(DOCS_DIR, 'gemini-draft.md')}`);
     }
-    
+
+    // 결과 품질 피드백 로그 기록
+    const feedbackLog = generateQualityFeedback(packet, result, cli, target, task);
+    const feedbackPath = join(DELEGATION_DIR, `${cli}-${target}-${timestamp}-feedback.md`);
+    writeFileSync(feedbackPath, feedbackLog, 'utf8');
+    console.log(`[delegate] 품질 피드백: ${feedbackPath}`);
+
     console.log(`[delegate] 완료.`);
     console.log(result);
-    
+
   } catch (err) {
     console.error(`[delegate] ${cli} CLI 실행 실패:`, err.message);
     if (err.stderr) console.error(err.stderr);
     process.exit(1);
   }
+}
+
+function generateQualityFeedback(packet, result, cli, target, task) {
+  const lines = [`# 위임 결과 품질 피드백`, ``, `- CLI: ${cli}`, `- Target: ${target}`, `- Task: ${task}`, `- 시각: ${new Date().toISOString()}`, ``];
+
+  const checks = [];
+  const resultLower = (result || '').toLowerCase();
+
+  // 1. 결과물 존재 여부
+  checks.push({
+    item: '결과물 존재',
+    pass: result && result.trim().length > 50,
+    detail: result ? `${result.trim().length}자` : '결과 없음',
+  });
+
+  // 2. 작업 지시 키워드 매칭
+  const taskKeywords = task.split(/[\s,./]+/).filter(w => w.length > 2);
+  const matchedKeywords = taskKeywords.filter(k => resultLower.includes(k.toLowerCase()));
+  const keywordRatio = taskKeywords.length > 0 ? matchedKeywords.length / taskKeywords.length : 0;
+  checks.push({
+    item: '작업 키워드 일치',
+    pass: keywordRatio >= 0.3,
+    detail: `${matchedKeywords.length}/${taskKeywords.length} (${Math.round(keywordRatio * 100)}%)`,
+  });
+
+  // 3. Codex 전용: 코드 포함 여부
+  if (cli === 'codex') {
+    const hasCode = /function |const |import |export |class |def |async /.test(result || '');
+    checks.push({ item: '코드 포함', pass: hasCode, detail: hasCode ? 'O' : 'X' });
+  }
+
+  // 4. Gemini 전용: 출처 포함 여부 (research)
+  if (cli === 'gemini' && target === 'research') {
+    const hasSource = /https?:\/\//.test(result || '');
+    checks.push({ item: '출처 URL 포함', pass: hasSource, detail: hasSource ? 'O' : 'X' });
+  }
+
+  // 5. 한글 인코딩 정상 여부
+  const hasBroken = /[\x80-\x9f]/.test(result || '');
+  checks.push({ item: '인코딩 정상', pass: !hasBroken, detail: hasBroken ? '깨짐 감지' : 'OK' });
+
+  lines.push('## 체크리스트');
+  lines.push('| 항목 | 결과 | 상세 |');
+  lines.push('|------|------|------|');
+  for (const c of checks) {
+    lines.push(`| ${c.item} | ${c.pass ? '\u2705' : '\u274C'} | ${c.detail} |`);
+  }
+
+  const passCount = checks.filter(c => c.pass).length;
+  const totalScore = Math.round((passCount / checks.length) * 100);
+  lines.push('');
+  lines.push(`## 총점: ${totalScore}% (${passCount}/${checks.length})`);
+
+  if (totalScore < 60) {
+    lines.push('');
+    lines.push('> \u26A0\uFE0F 품질 미달 — 패킷 보강 또는 재위임 권장');
+  }
+
+  return lines.join('\n') + '\n';
 }
 
 main();

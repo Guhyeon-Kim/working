@@ -1,24 +1,22 @@
 ---
 name: design-review
-description: design-agent 완료 전, qa-agent UI 검토 시 자동 로드. HubWise 디자인 품질 기준으로 평가한다.
+description: design-agent 완료 전, qa-agent UI 검토 시 자동 로드. 프로젝트 디자인 품질 기준으로 평가한다.
 allowed-tools: Read
 ---
 
 # Design Review
 
-디자인 결과물이 HubWise 품질 기준을 충족하는지 평가한다.
+디자인 결과물이 프로젝트 디자인 시스템 기준을 충족하는지 평가한다.
 "그럴듯해 보임"이 아니라 구체적 기준으로 판단한다.
 
-> 상세 기준: `.claude/docs/design-guide.md` (Design System v1.0)
-> 시각 검증: Puppeteer MCP로 스크린샷 확인 가능
+> **기준 문서**: `.claude/docs/design-system.md` (없으면 BLOCK — design-system 스킬로 생성)
+> 시각 검증: Playwright MCP 또는 Figma MCP로 확인 가능
 
 ## 품질 체크리스트
 
 ### 레이아웃 / maxWidth
 ```
-□ Reading 페이지 (뉴스상세, 전략상세, 마이페이지, 일지상세): maxWidth 720px
-□ Standard 페이지 (검색, 일반 목록): maxWidth 800px 또는 content-area
-□ Wide 페이지 (대시보드, 포트폴리오): content-area (1040px)
+□ 프로젝트 레이아웃 기준에 맞는 maxWidth가 적용됐는가?
 □ 페이지 간 width 일관성이 있는가?
 ```
 
@@ -32,23 +30,19 @@ allowed-tools: Read
 
 ### 타이포그래피 계층
 ```
-□ 랜딩 히어로: Plus Jakarta Sans + clamp(1.875rem, 7vw, 4.5rem)
 □ 페이지 제목: 28~32px / weight 700
 □ 섹션 제목: 18~20px / weight 600
 □ 본문: 14~15px / weight 400
-□ 보조 텍스트: 12~13px / var(--hw-muted) or var(--hw-muted-2)
+□ 보조 텍스트: 12~13px / 프로젝트 디자인 시스템의 muted 변수 사용
 □ 한국어 텍스트: word-break: keep-all 적용됐는가?
 ```
 
-### 컬러 사용 (Design System v1.0)
+### 컬러 사용
 ```
 □ CSS 변수 사용 (하드코딩 없는가)
-□ --hw-* 변수 사용 (레거시 --navy, --surface 없는가)
-□ 브랜드 그린 var(--hw-green) #00D48A 일관성 있게 사용
-□ 코랄 var(--hw-coral) #FF7E5F — 편향/포인트 강조용으로만 사용
-□ 상승 var(--hw-rise) #F04452 / 하락 var(--hw-fall) #1D6FEB 올바르게 사용
-□ 다크 섹션: var(--hw-navy) #0F172A — Hero/CTA 전용
-□ 배경: var(--hw-bg) #F8FAFC / 카드: var(--hw-surface) #FFFFFF
+□ 프로젝트 디자인 시스템의 CSS 변수를 일관성 있게 사용
+□ 브랜드 색상이 디자인 시스템 정의에 맞게 사용됐는가
+□ 상태 색상 (success/danger/warning)이 올바르게 사용됐는가
 □ 배경-텍스트 대비비 4.5:1 이상 (WCAG AA)
 ```
 
@@ -68,10 +62,10 @@ allowed-tools: Read
 □ 텍스트 잘림 없는가 (overflow 처리)
 ```
 
-### Koyfin/Stripe 기준 비교
+### 정보 밀도 및 시각 품질
 ```
-□ 데이터가 밀도 있게 배치됐는가? (Koyfin)
-□ 여백이 숨쉬는 느낌인가? (Stripe)
+□ 데이터가 적절한 밀도로 배치됐는가?
+□ 여백이 충분하여 가독성이 좋은가?
 □ 정보 계층이 한눈에 파악되는가?
 □ 불필요한 장식 요소가 없는가?
 ```

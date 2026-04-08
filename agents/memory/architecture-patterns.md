@@ -1,4 +1,4 @@
-# Architecture Patterns — HubWise Invest
+# Architecture Patterns
 
 > 동일 문제 2회 이상 발생 시 기록. 유사 상황에서 우선 참조.
 
