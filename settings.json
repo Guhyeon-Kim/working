@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "language": "korean",
+  "permissions": {
+    "defaultMode": "auto",
+    "allow": [
+      "Bash(*)",
+      "Edit(*)",
+      "Write(*)",
+      "Read(//c/Users/김구현/.claude/**)",
+      "mcp__claude_ai_Notion__notion-search",
+      "mcp__claude_ai_Notion__notion-fetch",
+      "mcp__claude_ai_Notion__notion-update-page",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__list_tables",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_fill_form",
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_navigate_back",
+      "mcp__claude_ai_Supabase__apply_migration",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "Read(//c/Users/김구현/Desktop/프로젝트/frontend/src/app/stocks/search/**)",
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_wait_for",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_network_requests",
+      "mcp__playwright__browser_take_screenshot",
+      "Read(//c/Users/김구현/Desktop/프로젝트/.claude/**)",
+      "mcp__claude_ai_Notion__notion-create-pages",
+      "Skill"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\김구현\\Desktop\\프로젝트2\\.claude",
+      "C:\\Users\\김구현\\Desktop\\프로젝트\\.claude"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"C:/Users/김구현/.claude/hooks/session-start-memory.mjs\"",
+            "timeout": 10,
+            "statusMessage": "메모리 로딩 중..."
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"C:/Users/김구현/.claude/hooks/cli-health-check.mjs\"",
+            "timeout": 10,
+            "statusMessage": "CLI 상태 확인 중..."
+          },
+          {
+            "type": "command",
+            "command": "node \"C:/Users/김구현/.claude/hooks/quality-gc.mjs\"",
+            "timeout": 15,
+            "statusMessage": "품질 GC 확인 중..."
+          },
+          {
+            "type": "command",
+            "command": "node \"C:/Users/김구현/.claude/hooks/on-prompt.mjs\"",
+            "timeout": 10,
+            "statusMessage": "작업 기록 + 위험 감지 중..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|WebSearch|WebFetch|Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"C:/Users/김구현/.claude/hooks/enforce-delegation.mjs\"",
+            "timeout": 5,
+            "statusMessage": "위임 규칙 검증 중..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"C:/Users/김구현/.claude/hooks/acl-post-build.mjs\"",
+            "timeout": 15,
+            "statusMessage": "빌드 결과 검증 중..."
+          },
+          {
+            "type": "command",
+            "command": "node \"C:/Users/김구현/.claude/scripts/post-push-hook.mjs\"",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"C:/Users/김구현/.claude/hooks/acl-subagent-stop.mjs\"",
+            "timeout": 120,
+            "statusMessage": "서브에이전트 결과 검증 중..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"C:/Users/김구현/.claude/hooks/on-stop.sh\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "node \"C:/Users/김구현/.claude/hooks/evolving-guardrails.mjs\"",
+            "timeout": 10,
+            "statusMessage": "진화 규칙 업데이트 중..."
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "telegram@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "pr-review-toolkit@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": true,
+    "codex@openai-codex": true
+  },
+  "extraKnownMarketplaces": {
+    "openai-codex": {
+      "source": {
+        "source": "github",
+        "repo": "openai/codex-plugin-cc"
+      }
+    }
+  }
+}

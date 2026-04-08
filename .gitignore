@@ -1,0 +1,40 @@
+# Credentials & secrets
+.credentials.json
+settings.local.json
+mcp-needs-auth-cache.json
+
+# Session/runtime data
+sessions/
+session-env/
+shell-snapshots/
+plans/
+ide/
+file-history/
+backups/
+cache/
+debug/
+downloads/
+paste-cache/
+history.jsonl
+
+# Plugin cache (large binaries)
+plugins/cache/
+plugins/marketplaces/
+
+# Project-specific data
+projects/
+
+# Temp files
+*.tmp
+activity-log.md
+project-log.md
+quality-gate-log.md
+current-task.tmp
+
+# Old backups
+*.bak
+agents.bak/
+plugins.bak/
+
+# Channels (contains tokens)
+channels/
