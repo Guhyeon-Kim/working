@@ -176,13 +176,43 @@ function runOnPrompt(input) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 실행: 3개 함수를 병렬 실행 (Promise.all은 sync 함수에선 불필요,
-// 하지만 모두 sync이므로 순차 실행해도 총 시간은 거의 동일.
-// 핵심은 "단일 프로세스 1개"로 3개 훅 프로세스 오버헤드 제거)
+// 4. Context Rot 방지 (턴 카운터)
+// ═══════════════════════════════════════════════════════════════
+function runContextRotGuard() {
+  const counterPath = join(claudeDir, 'turn-counter.json');
+  let counter = safeReadJSON(counterPath) || { turns: 0, sessionStart: new Date().toISOString() };
+
+  counter.turns += 1;
+  counter.lastTurn = new Date().toISOString();
+  writeFileEnsured(counterPath, JSON.stringify(counter, null, 2) + '\n');
+
+  if (counter.turns === 30) {
+    process.stderr.write(
+      '\u26A0\uFE0F [Context Rot \uBC29\uC9C0] 30\uD134 \uB3C4\uB2EC \u2014 \uCEE8\uD14D\uC2A4\uD2B8 \uD488\uC9C8 \uC800\uD558 \uAC00\uB2A5\uC131.\n' +
+      '  \u2192 /compact \uB610\uB294 \uC11C\uBE0C\uC5D0\uC774\uC804\uD2B8 \uD65C\uC6A9\uC744 \uAD8C\uC7A5\uD569\uB2C8\uB2E4.\n'
+    );
+  } else if (counter.turns === 50) {
+    process.stderr.write(
+      '\uD83D\uDEA8 [Context Rot \uBC29\uC9C0] 50\uD134 \uCD08\uACFC \u2014 \uCEE8\uD14D\uC2A4\uD2B8 \uD488\uC9C8\uC774 \uC2EC\uAC01\uD558\uAC8C \uC800\uD558\uB418\uC5C8\uC744 \uC218 \uC788\uC2B5\uB2C8\uB2E4.\n' +
+      '  \u2192 \uC0C8 \uC138\uC158 \uC2DC\uC791\uC744 \uAC15\uB825\uD788 \uAD8C\uC7A5\uD569\uB2C8\uB2E4.\n' +
+      '  \u2192 \uD604\uC7AC \uC9C4\uD589 \uC0C1\uD669\uC744 project-log\uC5D0 \uAE30\uB85D\uD558\uACE0 \uC138\uC158\uC744 \uC885\uB8CC\uD558\uC138\uC694.\n'
+    );
+  } else if (counter.turns > 50 && counter.turns % 10 === 0) {
+    process.stderr.write(
+      `\uD83D\uDEA8 [Context Rot] ${counter.turns}\uD134 \u2014 \uC138\uC158 \uC885\uB8CC \uAD8C\uC7A5\n`
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 실행: 4개 함수를 단일 프로세스로 실행
+// (모두 sync이므로 순차 실행해도 총 시간은 거의 동일.
+// 핵심은 "단일 프로세스 1개"로 훅 프로세스 오버헤드 제거)
 // ═══════════════════════════════════════════════════════════════
 function run(input) {
   try { runCliHealthCheck(); } catch { /* non-blocking */ }
   try { runQualityGC(); } catch { /* non-blocking */ }
   try { runOnPrompt(input); } catch { /* non-blocking */ }
+  try { runContextRotGuard(); } catch { /* non-blocking */ }
   process.exit(0);
 }

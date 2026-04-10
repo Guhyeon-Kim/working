@@ -13,7 +13,7 @@
  * 출력: stderr로 요약 경고/알림 → 에이전트가 세션 초반에 인지
  */
 
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
 function readStdin() {
@@ -145,7 +145,17 @@ async function main() {
     process.stderr.write('================================\n\n');
   }
 
-  // 7. 헬스 대시보드 생성 (.claude/health-dashboard.md)
+  // 7. 턴 카운터 리셋 (Context Rot 방지)
+  const turnCounterPath = join(claudeDir, 'turn-counter.json');
+  try {
+    writeFileSync(turnCounterPath, JSON.stringify({
+      turns: 0,
+      sessionStart: new Date().toISOString(),
+      lastTurn: null,
+    }, null, 2) + '\n', 'utf8');
+  } catch { /* ignore */ }
+
+  // 8. 헬스 대시보드 생성 (.claude/health-dashboard.md)
   generateHealthDashboard(messages, claudeDir);
 
   process.exit(0);

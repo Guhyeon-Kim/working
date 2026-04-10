@@ -31,6 +31,14 @@ project-log.md
 quality-gate-log.md
 current-task.tmp
 
+# Session-scoped runtime files (regenerated each session)
+.claude/turn-counter.json
+.claude/health-dashboard.md
+.claude/cli-status.json
+.claude/current-task.tmp
+.claude/activity-log.md
+.claude/pending-hookify.json
+
 # Old backups
 *.bak
 agents.bak/
