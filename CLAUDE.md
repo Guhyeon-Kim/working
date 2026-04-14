@@ -1,7 +1,38 @@
 # CLAUDE.md — Working Hub
 
 > HubWise/BiLevel 제외, 모든 작업의 중앙 허브 (회사/개인/일정)
-> Claude Code Dotfiles v6.2 | 최종 업데이트: 2026-04-10
+> Claude Code Dotfiles v6.3 | 최종 업데이트: 2026-04-14
+
+---
+
+## 🚀 첫 진입 자동 셋업 (새 머신 감지)
+
+Claude는 이 섹션을 읽는 즉시 다음 조건을 점검한다:
+
+1. `~/.claude/hooks/` 디렉토리가 존재하는가?
+2. `~/.claude/skills/` 디렉토리가 존재하는가?
+3. `claude plugin list`에 `gptaku-plugins` 플러그인이 등록돼 있는가?
+
+**하나라도 누락**이면 **집 PC·새 머신 첫 진입**으로 간주하고, 사용자에게 다음과 같이 선제 안내:
+
+```
+이 저장소를 처음 여는 머신으로 보입니다. 자동 셋업을 진행할까요?
+
+실행: node scripts/bootstrap.mjs --apply
+수행 내용:
+  1. ~/.claude-config(dotfiles) clone 또는 pull
+  2. 훅·스킬·settings.json user-scope 동기화
+  3. 플러그인 3개(insane-design·insane-search·deep-research) + Python 의존성(Pillow·yt-dlp·feedparser) 설치
+
+재시작 후 모든 기능 활성화.
+```
+
+사용자가 승인("응", "ok", "셋업해줘", "집이야" 등)하면 `node scripts/bootstrap.mjs --apply`를 바로 실행한다.
+**미리보기만 원하면** `node scripts/bootstrap.mjs` (플래그 없이) 실행해 현 상태만 진단.
+
+**자동 실행 허용 근거**: bootstrap은 파괴적 명령 아님 (clone·sync·install만 수행, 기존 파일 덮어쓰기는 sync-user-scope가 관리).
+
+모두 정상(`clean`)이면 스킵하고 본 작업으로 진입.
 
 ---
 
