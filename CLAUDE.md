@@ -101,6 +101,28 @@ GEMINI_MODEL="gemini-3.2-pro-preview" node scripts/delegate.mjs gemini research 
 - **Context7**: 최신 라이브러리 문서 주입 (코드 생성 품질)
 - **GitHub**: PR·issue·repo 관리 (Codespace `GITHUB_TOKEN` 자동 활용)
 
+## 리서치·레퍼런스 수집 4축 라우팅
+
+**research-agent가 라우터 역할**. 요청 받으면 먼저 어느 축인지 판단 후 해당 도구만 사용한다.
+
+| 축 | 도구 | 언제 |
+|---|---|---|
+| **A. 단건 웹 리딩** | `WebFetch` / `WebSearch` | URL 하나 읽기. `insane-search` 플러그인이 차단 플랫폼(X·Reddit·네이버 블로그·디시·YouTube 자막 등 40+) 자동 우회 |
+| **B. 디자인 레퍼런스** | `/insane-design [URL]` | 특정 서비스 UI·CSS 토큰·폰트 스택 추출 → `design.md` + 인터랙티브 리포트 |
+| **C. 일반 리서치** | `node scripts/delegate.mjs gemini research "..."` | 경쟁 조사, 시장 규모, 1~5p 요약. Gemini 체인(preview→2.5-pro→flash) 자동 폴백 |
+| **D. 딥 리서치** | `/deep-research [주제]` | 20p+ 종합 리포트, 7단계 파이프라인·멀티에이전트·A~E 등급·교차검증. 제안서·투자·중요 의사결정 근거용 |
+
+**D축 발동 기준** (하나라도 해당): 20p+ 리포트 / 소스 간 교차검증 필수 / 웹·PPT 패키징 / 세션 중단·재개.
+그 외는 C축 기본, A·B는 요청 성격 명확할 때만.
+
+**보안 주의**: 쿼리·URL이 외부 서비스로 전송된다 (Jina Reader, 웹 검색, Gemini 등).
+- 민감 URL(내부 도메인, `.claude/` 경로) 금지
+- 비공개 아이디어·차별화 포인트는 추상화된 키워드로 쿼리
+- PII·시크릿 자기 검사 후 전송
+- `RESEARCH/` 산출물은 `.gitignore` 확인
+
+설치 플러그인: `insane-design`, `insane-search`, `deep-research` (gptaku-plugins 마켓플레이스). Windows 로컬에 반영하려면 [scripts/setup-plugins.mjs](scripts/setup-plugins.mjs) 참고.
+
 ## 자동 의도 라우팅
 
 사용자가 자연어로 말하면 Claude가 의도를 파악하여 자동으로 적절한 워크플로우를 실행한다.

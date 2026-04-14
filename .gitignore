@@ -46,3 +46,7 @@ plugins.bak/
 
 # Channels (contains tokens)
 channels/
+
+# Research 산출물 (deep-research 플러그인)
+# — 민감 주제가 포함될 수 있으므로 기본 제외. 공개 리서치는 명시적으로 add.
+RESEARCH/
