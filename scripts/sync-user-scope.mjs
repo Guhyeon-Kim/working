@@ -22,8 +22,8 @@
  *   - 기존 settings.json의 permissions/enabledPlugins 등은 유지
  */
 
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, copyFileSync, existsSync, rmSync } from 'fs';
-import { join, dirname, relative, sep } from 'path';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, copyFileSync, existsSync, rmSync, cpSync, realpathSync } from 'fs';
+import { join, dirname, relative, sep, resolve } from 'path';
 import { homedir, platform } from 'os';
 import { fileURLToPath } from 'url';
 
@@ -37,31 +37,53 @@ const log = (...args) => console.log('[sync]', ...args);
 const warn = (...args) => console.warn('[sync][경고]', ...args);
 
 // ─── 유틸 ───
+// Windows + 한글 경로 버그 회피: 수동 재귀 대신 Node 내장 cpSync 사용.
+// src/dst가 같은 실경로를 가리키면 clean 단계에서 source가 삭제되는 사고 방지.
+function samePath(a, b) {
+  try {
+    return realpathSync(a) === realpathSync(b);
+  } catch {
+    return resolve(a) === resolve(b);
+  }
+}
+
+function countFiles(dir) {
+  if (!existsSync(dir)) return 0;
+  let n = 0;
+  for (const entry of readdirSync(dir)) {
+    const p = join(dir, entry);
+    const st = statSync(p);
+    if (st.isDirectory()) n += countFiles(p);
+    else n++;
+  }
+  return n;
+}
+
 function copyDir(src, dst, opts = {}) {
   const { clean = false } = opts;
-  if (!existsSync(src)) return { copied: 0 };
+  if (!existsSync(src)) {
+    warn(`source 없음: ${src} — 스킵`);
+    return { copied: 0 };
+  }
+  if (existsSync(dst) && samePath(src, dst)) {
+    warn(`src와 dst가 동일 경로: ${src} — 위험, 스킵 (source 보호)`);
+    return { copied: 0 };
+  }
+  const srcFileCount = countFiles(src);
+  if (srcFileCount === 0) {
+    warn(`source가 비어있음: ${src} — clean 건너뜀 (기존 dst 보존)`);
+    return { copied: 0 };
+  }
 
   if (clean && existsSync(dst)) {
-    // 대상 디렉토리 내용만 비우고 (dst 자체는 유지) 재복사
-    for (const entry of readdirSync(dst)) {
-      rmSync(join(dst, entry), { recursive: true, force: true });
-    }
+    // dst가 심볼릭링크/파일이어도 안전하게 제거 (cpSync 요구사항)
+    rmSync(dst, { recursive: true, force: true });
   }
-  mkdirSync(dst, { recursive: true });
+  mkdirSync(dirname(dst), { recursive: true });
 
-  let copied = 0;
-  for (const entry of readdirSync(src)) {
-    const s = join(src, entry);
-    const d = join(dst, entry);
-    const stat = statSync(s);
-    if (stat.isDirectory()) {
-      copied += copyDir(s, d).copied;
-    } else {
-      copyFileSync(s, d);
-      copied++;
-    }
-  }
-  return { copied };
+  // Node 16.7+ 내장. Windows/Unicode 경로 처리가 수동 재귀보다 안정적.
+  cpSync(src, dst, { recursive: true, force: true, errorOnExist: false });
+  return { copied: countFiles(dst) };
 }
 
 // ─── 1. hooks 동기화 ───
