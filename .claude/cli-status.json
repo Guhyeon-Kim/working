@@ -1,7 +1,5 @@
 {
-  "codex": false,
-  "gemini": false,
-  "checkedAt": "2026-04-08T08:05:54.071Z",
-  "codexVersion": null,
-  "geminiVersion": null
+  "codex": true,
+  "gemini": true,
+  "checkedAt": "2026-04-14T04:28:09.928Z"
 }

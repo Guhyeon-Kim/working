@@ -1,26 +1,73 @@
 #!/usr/bin/env node
 /**
- * delegate.mjs — CLI 위임 래퍼 v1.0
- * 
+ * delegate.mjs — CLI 위임 래퍼 v1.1
+ *
  * 목적: Codex/Gemini 호출 시 컨텍스트 패킷을 자동 조립하여
  *       "제대로 된 위임"이 가장 쉬운 경로가 되도록 한다.
- * 
+ *
  * 사용법:
  *   node delegate.mjs codex frontend "로그인 페이지 구현"
- *   node delegate.mjs codex backend "stocks API 엔드포인트 구현"  
+ *   node delegate.mjs codex backend "stocks API 엔드포인트 구현"
  *   node delegate.mjs gemini research "경쟁사 QR 결제 서비스 분석"
  *   node delegate.mjs gemini design "대시보드 화면 초안"
- * 
- * 동작:
- *   1. 프로젝트 컨텍스트에서 관련 파일 자동 탐색
- *   2. 작업 유형에 맞는 컨텍스트 패킷 조립
- *   3. 패킷 + 작업 지시를 CLI에 전달
- *   4. 결과물을 표준 경로에 저장
+ *
+ * 환경변수 (모델 체인 제어):
+ *   GEMINI_MODEL_CHAIN    전체 체인 강제 (콤마 구분). 예: "gemini-3.1-pro-preview,gemini-2.5-pro,gemini-2.5-flash"
+ *   GEMINI_MODEL          primary 모델만 교체. 기본 체인의 첫 요소 대체
+ *   GEMINI_FALLBACK_MODEL secondary 모델 교체 (deprecated; GEMINI_MODEL_CHAIN 권장)
+ *   DELEGATE_TIMEOUT_MS   단일 시도 타임아웃 (기본: 300000)
+ *
+ * 기본 모델 체인 (target별):
+ *   research/design  : [최신 preview] → [안정 pro] → [경량 flash]  (품질 우선)
+ *   기타              : [안정 pro]    → [경량 flash]               (재현성 우선)
+ *
+ * 모델 이름은 Google 정책에 따라 주기적으로 변경됨.
+ * 신규 preview 모델이 등장하면 GEMINI_MODEL_CHAIN으로 즉시 반영 가능.
+ *
+ * v1.2 변경점:
+ *   - 3단 모델 체인 지원 (preview → pro → flash)
+ *   - target별 체인 힌트 (research는 최신 우선, 그 외는 안정 우선)
+ *   - GEMINI_MODEL_CHAIN 환경변수로 체인 전체 override
+ * v1.1:
+ *   - spawnSync + 배열 인자로 shell escape 원천 차단
+ *   - 429/RESOURCE_EXHAUSTED/ETIMEDOUT/5xx 자동 폴백
+ *   - 시도 이력을 feedback 리포트에 누적
  */
 
+// ─── Gemini 모델 체인 ───
+//
+// 2026-04-13 기준. 신규 preview 출시 시 GEMINI_MODEL_CHAIN으로 override하거나 여기를 업데이트.
+const GEMINI_CHAINS = {
+  quality: ['gemini-3.1-pro-preview', 'gemini-2.5-pro', 'gemini-2.5-flash'],
+  standard: ['gemini-2.5-pro', 'gemini-2.5-flash'],
+};
+
+function resolveGeminiChain(target) {
+  // 1순위: 환경변수 전체 체인 override
+  if (process.env.GEMINI_MODEL_CHAIN) {
+    return process.env.GEMINI_MODEL_CHAIN.split(',').map(s => s.trim()).filter(Boolean);
+  }
+
+  // 2순위: target별 기본 체인
+  const useQuality = target === 'research' || target === 'design';
+  const base = useQuality ? GEMINI_CHAINS.quality : GEMINI_CHAINS.standard;
+  let chain = [...base];
+
+  // 3순위: GEMINI_MODEL이 있으면 맨 앞에 주입 (중복 제거)
+  if (process.env.GEMINI_MODEL) {
+    chain = [process.env.GEMINI_MODEL, ...chain.filter(m => m !== process.env.GEMINI_MODEL)];
+  }
+  // 4순위: GEMINI_FALLBACK_MODEL이 있으면 체인에 없을 때만 뒤에 append (레거시 호환)
+  if (process.env.GEMINI_FALLBACK_MODEL && !chain.includes(process.env.GEMINI_FALLBACK_MODEL)) {
+    chain.push(process.env.GEMINI_FALLBACK_MODEL);
+  }
+
+  return chain;
+}
+
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'fs';
-import { join, resolve } from 'path';
-import { execSync } from 'child_process';
+import { join, resolve, dirname } from 'path';
+import { execSync, spawnSync } from 'child_process';
 
 // ─── 설정 ───
 const PROJECT_ROOT = process.cwd();
@@ -88,18 +135,24 @@ function extractRelevantSection(content, keywords) {
 
 function findRelatedFiles(dir, keywords, extensions = ['.tsx', '.ts', '.jsx', '.js', '.py']) {
   const results = [];
-  if (!existsSync(dir)) return results;
-  
-  try {
-    const output = execSync(
-      `grep -rl ${keywords.map(k => `"${k}"`).join(' ')} ${dir} --include="*.ts" --include="*.tsx" --include="*.py" --include="*.jsx" --include="*.js" 2>/dev/null | head -10`,
-      { encoding: 'utf8', timeout: 5000 }
-    ).trim();
-    if (output) results.push(...output.split('\n'));
-  } catch {
-    // grep 결과 없으면 무시
+  if (!existsSync(dir) || !keywords || keywords.length === 0) return results;
+
+  // 쉘 인젝션 방지: 안전한 키워드만 통과 (영숫자/한글/언더스코어/하이픈/점)
+  const safeKeywords = keywords
+    .filter(k => typeof k === 'string' && /^[\p{L}\p{N}_.\-]+$/u.test(k))
+    .slice(0, 5); // 과도한 패턴 수 제한
+
+  if (safeKeywords.length === 0) return results;
+
+  // spawnSync + 인자 배열 → 쉘 해석 없음
+  const args = [];
+  for (const k of safeKeywords) { args.push('-e', k); }
+  args.push('-rl', '--include=*.ts', '--include=*.tsx', '--include=*.py', '--include=*.jsx', '--include=*.js', dir);
+
+  const res = spawnSync('grep', args, { encoding: 'utf8', timeout: 5000 });
+  if (res.status === 0 && res.stdout) {
+    results.push(...res.stdout.trim().split('\n').filter(Boolean).slice(0, 10));
   }
-  
   return results;
 }
 
@@ -219,7 +272,7 @@ function buildGeminiPacket(target, task) {
 - 구조: 요약(3줄) → 핵심 발견 → 상세 분석 → 시사점
 - 출처: 모든 주장에 출처 URL 포함
 - 길이: 최소 500자, 최대 3000자
-- 저장: .claude/docs/gemini-draft.md
+- 출력만 반환 (파일 저장은 Claude Code 측에서 수행 — 모델이 쓰기 시도 금지)
 `);
     
     // 기존 리서치 결과 요약 (중복 방지)
@@ -235,7 +288,7 @@ function buildGeminiPacket(target, task) {
 - 형식: 마크다운 (.md) + 컴포넌트 구조
 - 구조: 화면 목적 → 레이아웃 → 컴포넌트 계층 → 상태 정의 → 인터랙션
 - 디자인 시스템: shadcn/ui + Tailwind CSS 기준
-- 저장: .claude/docs/gemini-draft.md
+- 출력만 반환 (파일 저장은 Claude Code 측에서 수행 — 모델이 쓰기 시도 금지)
 `);
     
     // 디자인 가이드 참조
@@ -250,7 +303,7 @@ function buildGeminiPacket(target, task) {
 [기대 산출물]
 - 형식: 마크다운 (.md)
 - 톤: 전문적이면서 접근 가능한 톤
-- 저장: .claude/docs/gemini-draft.md
+- 출력만 반환 (파일 저장은 Claude Code 측에서 수행 — 모델이 쓰기 시도 금지)
 `);
   }
   
@@ -325,36 +378,58 @@ async function main() {
   const packetPath = join(DELEGATION_DIR, `${cli}-${target}-${timestamp}.md`);
   writeFileSync(packetPath, packet, 'utf8');
   
-  // CLI 실행
-  let command;
-  if (cli === 'codex') {
-    // Codex: target을 -C 디렉토리로 매핑
-    const codeDir = target === 'frontend' ? 'frontend' : 'backend';
-    command = `codex exec --full-auto -C ${codeDir} "${packet.replace(/"/g, '\\"')}"`;
-  } else {
-    // Gemini: 프롬프트로 전달
-    command = `gemini -p "${packet.replace(/"/g, '\\"')}"`;
-  }
-  
   console.log(`[delegate] 패킷 저장: ${packetPath}`);
   console.log(`[delegate] ${cli} CLI 호출 중 (target: ${target})...`);
-  
+
+  const attempts = [];
+  let result;
+  let finalErr;
+
   try {
-    const result = execSync(command, { 
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 300000, // 5분
-      maxBuffer: 10 * 1024 * 1024 // 10MB
-    });
-    
-    // Gemini 결과는 gemini-draft.md에 자동 저장
-    if (cli === 'gemini') {
-      writeFileSync(join(DOCS_DIR, 'gemini-draft.md'), result, 'utf8');
-      console.log(`[delegate] Gemini 결과 저장: ${join(DOCS_DIR, 'gemini-draft.md')}`);
+    if (cli === 'codex') {
+      const codeDir = target === 'frontend' ? 'frontend' : 'backend';
+      // spawnSync + 인자 배열 → shell escape 문제 원천 차단
+      result = runCli('codex', ['exec', '--full-auto', '-C', codeDir, packet], 'codex-default', attempts);
+    } else {
+      // Gemini: target별 모델 체인 (quality: preview→pro→flash, standard: pro→flash)
+      const chain = resolveGeminiChain(target);
+      console.log(`[delegate] 모델 체인: ${chain.join(' → ')}`);
+
+      for (const model of chain) {
+        try {
+          console.log(`[delegate] 시도: gemini -m ${model}`);
+          result = runCli('gemini', ['-m', model, '-p', packet], model, attempts);
+          break;
+        } catch (err) {
+          const last = attempts[attempts.length - 1];
+          const transient = isTransientError(err);
+          if (last) { last.error = summarizeErr(err); last.transient = transient; }
+
+          if (!transient) throw err;
+          console.error(`[delegate] ${model} 일시 오류 → 다음 모델 시도: ${summarizeErr(err).slice(0, 140)}`);
+          finalErr = err;
+        }
+      }
+
+      if (!result) throw finalErr || new Error('Gemini 모델 체인 전체 실패');
     }
 
-    // 결과 품질 피드백 로그 기록
-    const feedbackLog = generateQualityFeedback(packet, result, cli, target, task);
+    if (cli === 'gemini') {
+      const { mkdirSync } = await import('fs');
+      mkdirSync(DOCS_DIR, { recursive: true });
+
+      // 최신 결과는 gemini-draft.md (하위 호환), 히스토리는 timestamped 파일로 보존
+      const draftPath = join(DOCS_DIR, 'gemini-draft.md');
+      const historyPath = join(DOCS_DIR, `gemini-history/${timestamp}-${target}.md`);
+      mkdirSync(dirname(historyPath), { recursive: true });
+      writeFileSync(draftPath, result, 'utf8');
+      writeFileSync(historyPath, result, 'utf8');
+      console.log(`[delegate] Gemini 결과 저장:`);
+      console.log(`  - 최신: ${draftPath}`);
+      console.log(`  - 이력: ${historyPath}`);
+    }
+
+    const feedbackLog = generateQualityFeedback(packet, result, cli, target, task, attempts);
     const feedbackPath = join(DELEGATION_DIR, `${cli}-${target}-${timestamp}-feedback.md`);
     writeFileSync(feedbackPath, feedbackLog, 'utf8');
     console.log(`[delegate] 품질 피드백: ${feedbackPath}`);
@@ -363,14 +438,95 @@ async function main() {
     console.log(result);
 
   } catch (err) {
-    console.error(`[delegate] ${cli} CLI 실행 실패:`, err.message);
-    if (err.stderr) console.error(err.stderr);
+    const feedbackLog = generateQualityFeedback(packet, '', cli, target, task, attempts, err);
+    const feedbackPath = join(DELEGATION_DIR, `${cli}-${target}-${timestamp}-feedback.md`);
+    try { writeFileSync(feedbackPath, feedbackLog, 'utf8'); } catch {}
+
+    console.error(`[delegate] ${cli} CLI 실행 실패:`, (err.message || String(err)).split('\n')[0]);
+    if (err.stderr) console.error(String(err.stderr).slice(0, 500));
+    console.error(`[delegate] 시도 이력은 ${feedbackPath}에 저장됨`);
     process.exit(1);
   }
 }
 
-function generateQualityFeedback(packet, result, cli, target, task) {
+// ─── CLI 실행 + 에러 분류 ───
+
+function runCli(cmd, args, label, attemptsLog) {
+  const started = Date.now();
+  const timeout = Number(process.env.DELEGATE_TIMEOUT_MS) || 300000;
+
+  const res = spawnSync(cmd, args, {
+    encoding: 'utf8',
+    timeout,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+
+  const entry = { label, ms: Date.now() - started, status: res.status, signal: res.signal };
+
+  if (res.error) {
+    attemptsLog.push({ ...entry, ok: false });
+    const e = res.error;
+    e.stderr = res.stderr;
+    e.stdout = res.stdout;
+    throw e;
+  }
+  if (res.status !== 0) {
+    attemptsLog.push({ ...entry, ok: false });
+    const err = new Error(`${cmd} exited with status ${res.status}`);
+    err.code = res.status;
+    err.stderr = res.stderr;
+    err.stdout = res.stdout;
+    throw err;
+  }
+
+  attemptsLog.push({ ...entry, ok: true });
+  return res.stdout;
+}
+
+function isTransientError(err) {
+  const blob = [
+    err?.code,
+    err?.message,
+    err?.stderr ? String(err.stderr) : '',
+    err?.stdout ? String(err.stdout) : '',
+  ].join(' ').toLowerCase();
+
+  return (
+    /etimedout|econnreset|econnrefused|enotfound|socket hang up/.test(blob) ||
+    /\b(429|500|502|503|504)\b/.test(blob) ||
+    /resource_exhausted|rate.?limit|no capacity|unavailable|model_capacity/.test(blob) ||
+    /too many requests/.test(blob)
+  );
+}
+
+function summarizeErr(err) {
+  const out = (err?.stderr ? String(err.stderr) : '') || err?.message || String(err);
+  return out.replace(/\s+/g, ' ').trim().slice(0, 400);
+}
+
+function generateQualityFeedback(packet, result, cli, target, task, attempts = [], fatalErr = null) {
   const lines = [`# 위임 결과 품질 피드백`, ``, `- CLI: ${cli}`, `- Target: ${target}`, `- Task: ${task}`, `- 시각: ${new Date().toISOString()}`, ``];
+
+  if (attempts.length > 0) {
+    lines.push('## 시도 이력');
+    lines.push('| # | 라벨(모델) | 결과 | 소요(ms) | status | 비고 |');
+    lines.push('|---|-----------|------|----------|--------|------|');
+    attempts.forEach((a, i) => {
+      const note = a.transient ? '일시오류 → 폴백' : (a.error ? '치명' : '');
+      const errSnippet = a.error ? a.error.slice(0, 80) : '';
+      lines.push(`| ${i + 1} | ${a.label} | ${a.ok ? '✅' : '❌'} | ${a.ms} | ${a.status ?? '-'} | ${note} ${errSnippet} |`);
+    });
+    lines.push('');
+  }
+
+  if (fatalErr) {
+    lines.push('## 최종 실패');
+    lines.push('```');
+    lines.push(summarizeErr(fatalErr));
+    lines.push('```');
+    lines.push('');
+    return lines.join('\n') + '\n';
+  }
 
   const checks = [];
   const resultLower = (result || '').toLowerCase();

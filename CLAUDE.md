@@ -22,8 +22,8 @@
 ├── agents/              # 15개 전문 에이전트 (.md)
 │   ├── delegation_workflow.md  # 오케스트레이션 허브 v5.3
 │   └── memory/          # 누적 학습 (failure-cases, success-patterns 등)
-├── skills/              # 14개 스킬 (SKILL.md)
-├── hooks/               # 8개 훅 (.mjs)
+├── skills/              # 19개 스킬 (SKILL.md) — truth source
+├── hooks/               # 13개 훅 (.mjs/.sh) — truth source, settings.json은 user 경로 참조
 ├── docs/                # 문서 (에이전트-셋팅.md 등)
 ├── .claude/             # Claude Code 상태 파일
 │   ├── commands/project/ # 커스텀 슬래시 커맨드 (/project:*)
@@ -38,6 +38,9 @@
 3. **End-to-End 완결** — 시작한 작업은 반드시 끝까지 (delegation_workflow.md §2)
 4. **비파괴 우선** — git push --force, reset --hard 등 파괴적 명령 전 반드시 확인
 5. **산출물 정합성** — 요건명세 → 와이어프레임 → 플로우 → 테스트 시나리오 간 필드/예외 일치
+6. **repo → user 동기화 규칙** — `agents/`, `skills/`, `hooks/`는 repo가 truth. 새 파일/수정은 repo에 먼저 반영한 뒤 `~/.claude/` 하위로 복사. settings.json이 user 경로를 참조하므로 복사 빠지면 silently 실패함.
+7. **user-scope = 모든 프로젝트 공통 인프라** — `~/.claude/settings.json`과 user-scope MCP 서버는 Working Hub뿐 아니라 **하네스가 패치된 모든 프로젝트에 그대로 전파**된다. 따라서 Working Hub의 쓰임새만 보고 MCP/권한을 제거하면 안 된다. "하위 코드 프로젝트에서 필요한가?" 기준으로 판단할 것. 예: Playwright는 Working Hub에선 안 쓰지만 QA agent의 E2E BLOCKING 요건 때문에 user-scope에 상주해야 함.
+8. **크로스 플랫폼 필수** — 유저는 Codespace(Linux)와 Windows(VSCode/cmd) 양쪽에서 Claude Code를 사용한다. 훅은 `.mjs`(Node.js)만 작성, `.sh`는 Windows cmd에서 실행 불가. 경로는 `path.join()`, 환경변수는 OS별 문법 모두 안내. user-scope는 머신별 독립이므로 repo 업데이트 후 양쪽 환경에서 `node scripts/sync-user-scope.mjs` 실행이 동기화 방법.
 
 ## 에이전트 파이프라인 (5단계)
 
@@ -57,10 +60,46 @@
 | Gemini CLI | 리서치, 기획 초안, 디자인 초안 | `delegate.mjs gemini` |
 | Codex CLI | 소스 코드 구현 | `delegate.mjs codex` |
 
-## MCP 연동
+### Gemini 모델 체인 정책 (2026-04-13 기준)
 
-Notion, Supabase, Figma, Vercel, Make, Google Calendar, Gmail, Slack
-→ 기획 산출물 Notion 정리, 일정 Calendar 등록, 디자인 Figma 참조 가능
+`delegate.mjs`는 target에 따라 자동으로 모델 체인을 선택하고 일시 오류 시 폴백한다.
+
+| target | 기본 체인 | 전략 |
+|--------|----------|------|
+| `research`, `design` | preview → 2.5-pro → 2.5-flash | **품질 우선** — 최신 preview가 가용하면 사용, 용량 초과 시 안정 모델로 자동 하강 |
+| 그 외 (`frontend`, `backend`, `education`, `marketing`) | 2.5-pro → 2.5-flash | **재현성 우선** — preview 생략 |
+
+**현재 primary preview:** `gemini-3.1-pro-preview` (2026-04-13 확인)
+
+**신규 모델 출시 시 대응 (예: `gemini-3.2-pro-preview` 출시)**:
+```bash
+# 1회성 override
+GEMINI_MODEL_CHAIN="gemini-3.2-pro-preview,gemini-2.5-pro,gemini-2.5-flash" \
+  node scripts/delegate.mjs gemini research "..."
+
+# 또는 primary만 교체
+GEMINI_MODEL="gemini-3.2-pro-preview" node scripts/delegate.mjs gemini research "..."
+```
+체인 영구 변경은 [scripts/delegate.mjs](scripts/delegate.mjs)의 `GEMINI_CHAINS` 상수 업데이트.
+
+**폴백 트리거**: 429, RESOURCE_EXHAUSTED, MODEL_CAPACITY_EXHAUSTED, ETIMEDOUT, 5xx, "too many requests", "no capacity"
+**폴백 안 함**: ModelNotFound, 인증 실패, 문법 오류 등 재시도해도 동일한 결과가 나올 오류
+
+## MCP 연동 (10개 정상)
+
+**claude.ai 커넥터 (7개)**: Notion, Supabase, Figma, Vercel, Make, Google Calendar, Gmail
+**user-scope 로컬 (3개)**: Playwright, Context7, GitHub
+**미사용**: Slack (claude.ai dynamic scope, 해제 대기)
+
+용도:
+- **Notion**: 기획 산출물 저장, 제안서·리서치 정리
+- **Supabase / Vercel**: DB·배포 (코드 프로젝트)
+- **Figma**: 디자인 참조·코드 생성
+- **Make**: 외부 자동화 워크플로
+- **Google Calendar / Gmail**: 일정·메일 관리
+- **Playwright**: QA agent E2E 검증 (BLOCKING 요건)
+- **Context7**: 최신 라이브러리 문서 주입 (코드 생성 품질)
+- **GitHub**: PR·issue·repo 관리 (Codespace `GITHUB_TOKEN` 자동 활용)
 
 ## 자동 의도 라우팅
 
@@ -130,6 +169,22 @@ ultraplan으로 진행할까요?
 3. 사용자가 "깊게 생각해" / "대충 해줘" 등으로 오버라이드 가능
 4. 토큰 절약이 목적 — 단순 작업에 max를 쓰지 않는다
 
+### 품질 강조 트리거 → ultrathink / ultraplan 분기
+
+사용자가 **"상세하게 / 꼼꼼하게 / 제대로 / 깊게 / 집중해서 / 최대한 / 고민해서 / 정밀하게"** 등 품질 강조 표현을 쓰면 작업 성격에 따라 다르게 대응한다.
+
+| 작업 성격 | 대응 | 설명 |
+|-----------|------|------|
+| **구현·수정·디버깅·리팩터** | **ultrathink(=max effort)** 자동 적용 | 코드 수정 작업은 웹 리뷰가 과함 → 즉시 max effort로 깊게 추론하고 실행. 승인 요청 없이 바로 진행. |
+| **기획·설계·아키텍처** | **ultraplan 제안** | 웹에서 섹션별 리뷰가 필요 → `/ultraplan` 사용 제안 후 사용자 승인 대기. |
+| **리서치·조사** | **max effort + 출처 검증 강화** | Gemini 위임 + 교차 검증 |
+
+**ultrathink 자동 트리거 예시:**
+- "상세하게 수정해줘" / "꼼꼼하게 고쳐줘" / "제대로 디버깅해봐" / "깊이 고민해서 구현" → 즉시 max effort
+- "이슈를 집중해서 해결해줘" / "최대한 꼼꼼하게 봐줘" → 즉시 max effort
+
+**판단 기준:** 파일을 수정하거나 코드를 쓰는 작업이면 ultrathink, 문서/기획/아이데이션이면 ultraplan.
+
 ## 원격·모바일 작업
 
 | 기능 | 사용법 | 용도 |
@@ -173,6 +228,29 @@ ultraplan으로 진행할까요?
 - 단일 파일 수정, 순차적 의존성이 강한 작업
 - 기획/리서치 단계 (서브에이전트가 더 효율적)
 - 이 Working Hub repo에서의 작업 (코드 구현이 아니므로)
+
+## 크로스 플랫폼 동기화
+
+Codespace(Linux)와 Windows 로컬에서 같은 훅·스킬·전역 설정을 유지하려면 **repo 업데이트 후 양쪽 환경에서 한 번씩** 실행:
+
+```bash
+# Linux / macOS / Codespace
+node scripts/sync-user-scope.mjs
+
+# Windows cmd
+node scripts\sync-user-scope.mjs
+
+# Windows PowerShell
+node scripts/sync-user-scope.mjs
+```
+
+스크립트가 수행하는 작업:
+- `os.homedir()`로 현재 OS의 홈 디렉토리 자동 판별
+- `hooks/`, `skills/`를 `~/.claude/` 아래로 강제 동기화 (기존 파일 덮어쓰기)
+- `settings.json`의 훅 command 경로를 현재 OS 기준으로 재작성 (bash `.sh` → node `.mjs` 자동 치환 포함)
+- MCP 재등록 명령을 OS에 맞는 환경변수 문법으로 출력 (`$VAR` vs `%VAR%`)
+
+**주의**: MCP 서버(Playwright/Context7/GitHub)는 머신별 `~/.claude.json`에 따로 저장되므로, Windows에서 최초 한 번은 `claude mcp add` 명령을 직접 실행해야 함 (sync 스크립트가 명령어를 출력해줌).
 
 ## 하네스 패치
 
