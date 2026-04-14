@@ -38,8 +38,14 @@ const warn = (...args) => console.warn('[sync][경고]', ...args);
 
 // ─── 유틸 ───
 function copyDir(src, dst, opts = {}) {
-  const { clean = false } = opts;
-  if (!existsSync(src)) return { copied: 0 };
+  const { clean = false, _isRoot = true } = opts;
+  if (!existsSync(src)) return { copied: 0, skipped: false };
+
+  // 루트 호출에서 src가 비어 있으면 dst 보존 (git checkout 미완료 등 비정상 상태 방어)
+  if (_isRoot && readdirSync(src).length === 0) {
+    warn(`${src} 비어 있음 — dst(${dst}) 유지. 'git checkout HEAD -- <dir>' 후 재실행하세요.`);
+    return { copied: 0, skipped: true };
+  }
 
   if (clean && existsSync(dst)) {
     // 대상 디렉토리 내용만 비우고 (dst 자체는 유지) 재복사
@@ -55,23 +61,23 @@ function copyDir(src, dst, opts = {}) {
     const d = join(dst, entry);
     const stat = statSync(s);
     if (stat.isDirectory()) {
-      copied += copyDir(s, d).copied;
+      copied += copyDir(s, d, { _isRoot: false }).copied;
     } else {
       copyFileSync(s, d);
       copied++;
     }
   }
-  return { copied };
+  return { copied, skipped: false };
 }
 
 // ─── 1. hooks 동기화 ───
 log(`플랫폼: ${PLATFORM}  |  홈: ${HOME}  |  타겟: ${TARGET}`);
 const hooksResult = copyDir(join(REPO_ROOT, 'hooks'), join(TARGET, 'hooks'), { clean: true });
-log(`hooks/ 동기화 완료 (${hooksResult.copied}개 파일)`);
+log(`hooks/ 동기화 ${hooksResult.skipped ? '스킵 (src 비어있음)' : `완료 (${hooksResult.copied}개 파일)`}`);
 
 // ─── 2. skills 동기화 ───
 const skillsResult = copyDir(join(REPO_ROOT, 'skills'), join(TARGET, 'skills'), { clean: true });
-log(`skills/ 동기화 완료 (${skillsResult.copied}개 파일)`);
+log(`skills/ 동기화 ${skillsResult.skipped ? '스킵 (src 비어있음)' : `완료 (${skillsResult.copied}개 파일)`}`);
 
 // ─── 3. 전역 CLAUDE.md 동기화 ───
 const GLOBAL_CLAUDE_MD_TEMPLATE = `# 전역 Claude Code Instructions
