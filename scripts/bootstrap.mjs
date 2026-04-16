@@ -41,14 +41,17 @@ const warn = (...args) => console.warn('[bootstrap][경고]', ...args);
 const err = (...args) => console.error('[bootstrap][에러]', ...args);
 
 // ─── 유틸 ───
+// Windows는 `shell:true` 대신 `cmd.exe /d /s /c` 래핑으로 호출 — DEP0190 경고 회피 +
+// shell 모드에서 인자 이스케이프 안 되는 인젝션 위험 회피.
 function run(cmd, args, { capture = false, cwd } = {}) {
   const opts = {
     encoding: 'utf8',
-    shell: IS_WIN,
     ...(cwd ? { cwd } : {}),
     ...(capture ? {} : { stdio: 'inherit' }),
   };
-  const res = spawnSync(cmd, args, opts);
+  const spawnCmd = IS_WIN ? 'cmd.exe' : cmd;
+  const spawnArgs = IS_WIN ? ['/d', '/s', '/c', cmd, ...args] : args;
+  const res = spawnSync(spawnCmd, spawnArgs, opts);
   return { status: res.status, stdout: res.stdout?.trim() };
 }
 

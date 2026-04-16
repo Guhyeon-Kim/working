@@ -48,11 +48,14 @@ const PY_DEPS = [
 ];
 
 // ─── 유틸 ───
+// Windows는 `shell:true` 대신 `cmd.exe /d /s /c` 래핑 — DEP0190 경고 회피 + 인젝션 방지.
 function run(cmd, args, { capture = false } = {}) {
   const opts = capture
-    ? { encoding: 'utf8', shell: IS_WIN }
-    : { stdio: 'inherit', shell: IS_WIN };
-  const res = spawnSync(cmd, args, opts);
+    ? { encoding: 'utf8' }
+    : { stdio: 'inherit' };
+  const spawnCmd = IS_WIN ? 'cmd.exe' : cmd;
+  const spawnArgs = IS_WIN ? ['/d', '/s', '/c', cmd, ...args] : args;
+  const res = spawnSync(spawnCmd, spawnArgs, opts);
   return { status: res.status, stdout: res.stdout?.trim() };
 }
 

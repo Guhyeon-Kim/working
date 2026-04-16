@@ -45,6 +45,7 @@ const MANIFEST = [
   { src: 'skills', dst: 'skills', kind: 'dir' },
   { src: 'scripts/bootstrap.mjs', dst: 'scripts/bootstrap.mjs', kind: 'file' },
   { src: 'scripts/sync-user-scope.mjs', dst: 'scripts/sync-user-scope.mjs', kind: 'file' },
+  { src: 'scripts/setup-plugins.mjs', dst: 'scripts/setup-plugins.mjs', kind: 'file' },
   { src: 'scripts/delegate.mjs', dst: 'scripts/delegate.mjs', kind: 'file' },
   { src: 'scripts/cleanup-repo-hooks.mjs', dst: 'scripts/cleanup-repo-hooks.mjs', kind: 'file' },
   { src: 'settings.json', dst: 'settings.json', kind: 'file' },
@@ -64,21 +65,41 @@ function gitCapture(args, cwd = DOTFILES) {
   return { status: r.status, stdout: (r.stdout || '').trim(), stderr: (r.stderr || '').trim() };
 }
 
+// Windows+한글 경로에서 cpSync(recursive)가 `\\?\...release-TIMESTAMP` 임시 경로에
+// EIO Access denied로 실패하는 케이스용 fallback. atomic 보장은 포기하되 제자리 덮어쓰기.
+function copyDirInPlace(src, dst) {
+  mkdirSync(dst, { recursive: true });
+  for (const entry of readdirSync(src, { withFileTypes: true })) {
+    const sPath = join(src, entry.name);
+    const dPath = join(dst, entry.name);
+    if (entry.isDirectory()) copyDirInPlace(sPath, dPath);
+    else copyFileSync(sPath, dPath);
+  }
+}
+
 function atomicCopyDir(src, dst) {
   const stamp = Date.now();
   const tmpDst = `${dst}.release-${stamp}`;
   const bakDst = `${dst}.bak-${stamp}`;
   mkdirSync(dirname(dst), { recursive: true });
-  cpSync(src, tmpDst, { recursive: true, force: true, errorOnExist: false });
-  const hadExisting = existsSync(dst);
-  if (hadExisting) renameSync(dst, bakDst);
   try {
-    renameSync(tmpDst, dst);
+    cpSync(src, tmpDst, { recursive: true, force: true, errorOnExist: false });
+    const hadExisting = existsSync(dst);
+    if (hadExisting) renameSync(dst, bakDst);
+    try {
+      renameSync(tmpDst, dst);
+    } catch (e) {
+      if (hadExisting && existsSync(bakDst)) renameSync(bakDst, dst);
+      throw e;
+    }
+    if (hadExisting) rmSync(bakDst, { recursive: true, force: true });
   } catch (e) {
-    if (hadExisting && existsSync(bakDst)) renameSync(bakDst, dst);
-    throw e;
+    if (existsSync(tmpDst)) {
+      try { rmSync(tmpDst, { recursive: true, force: true }); } catch {}
+    }
+    warn(`atomic 복사 실패 (${e.message}) — 개별 파일 복사 fallback`);
+    copyDirInPlace(src, dst);
   }
-  if (hadExisting) rmSync(bakDst, { recursive: true, force: true });
 }
 
 function atomicCopyFile(src, dst) {

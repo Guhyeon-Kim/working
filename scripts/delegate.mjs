@@ -161,21 +161,38 @@ function findRelatedFiles(dir, keywords, extensions = ['.tsx', '.ts', '.jsx', '.
   const results = [];
   if (!existsSync(dir) || !keywords || keywords.length === 0) return results;
 
-  // 쉘 인젝션 방지: 안전한 키워드만 통과 (영숫자/한글/언더스코어/하이픈/점)
   const safeKeywords = keywords
     .filter(k => typeof k === 'string' && /^[\p{L}\p{N}_.\-]+$/u.test(k))
-    .slice(0, 5); // 과도한 패턴 수 제한
-
+    .slice(0, 5);
   if (safeKeywords.length === 0) return results;
 
-  // spawnSync + 인자 배열 → 쉘 해석 없음
-  const args = [];
-  for (const k of safeKeywords) { args.push('-e', k); }
-  args.push('-rl', '--include=*.ts', '--include=*.tsx', '--include=*.py', '--include=*.jsx', '--include=*.js', dir);
+  // Node-native 재귀 스캔 (Windows에 grep 미존재 대응). 배열 키워드는 OR.
+  const extSet = new Set(extensions);
+  const skipDirs = new Set(['node_modules', '.git', '.next', 'dist', 'build', '.cache', '.venv', '__pycache__']);
+  const regex = new RegExp(safeKeywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'));
+  const deadline = Date.now() + 5000;
+  const MAX = 10;
+  const stack = [dir];
 
-  const res = spawnSync('grep', args, { encoding: 'utf8', timeout: 5000 });
-  if (res.status === 0 && res.stdout) {
-    results.push(...res.stdout.trim().split('\n').filter(Boolean).slice(0, 10));
+  while (stack.length && results.length < MAX && Date.now() < deadline) {
+    const cur = stack.pop();
+    let entries;
+    try { entries = readdirSync(cur, { withFileTypes: true }); } catch { continue; }
+    for (const ent of entries) {
+      if (results.length >= MAX || Date.now() >= deadline) break;
+      const full = join(cur, ent.name);
+      if (ent.isDirectory()) {
+        if (!skipDirs.has(ent.name) && !ent.name.startsWith('.')) stack.push(full);
+        continue;
+      }
+      if (!ent.isFile()) continue;
+      const ext = ent.name.slice(ent.name.lastIndexOf('.'));
+      if (!extSet.has(ext)) continue;
+      try {
+        const content = readFileSync(full, 'utf8');
+        if (regex.test(content)) results.push(full);
+      } catch { /* ignore unreadable */ }
+    }
   }
   return results;
 }
@@ -479,7 +496,11 @@ function runCli(cmd, args, label, attemptsLog) {
   const started = Date.now();
   const timeout = Number(process.env.DELEGATE_TIMEOUT_MS) || 300000;
 
-  const res = spawnSync(cmd, args, {
+  // Windows: `shell:true` 대신 `cmd.exe /d /s /c` 래핑 (DEP0190 회피 + 인젝션 방지).
+  const isWin = process.platform === 'win32';
+  const spawnCmd = isWin ? 'cmd.exe' : cmd;
+  const spawnArgs = isWin ? ['/d', '/s', '/c', cmd, ...args] : args;
+  const res = spawnSync(spawnCmd, spawnArgs, {
     encoding: 'utf8',
     timeout,
     maxBuffer: 10 * 1024 * 1024,
