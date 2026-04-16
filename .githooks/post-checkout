@@ -14,7 +14,8 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
 
 # Working Hub 경로 자동 탐지 (post-merge와 동일)
 find_hub() {
-  if [ -f "$REPO_ROOT/scripts/sync-user-scope.mjs" ] && [ -d "$REPO_ROOT/agents" ]; then
+  # release-to-dotfiles.mjs는 working hub 고유 지표.
+  if [ -f "$REPO_ROOT/scripts/release-to-dotfiles.mjs" ] && [ -d "$REPO_ROOT/agents" ]; then
     echo "$REPO_ROOT"
     return 0
   fi

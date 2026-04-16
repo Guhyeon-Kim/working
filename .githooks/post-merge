@@ -21,8 +21,9 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
 
 # ── Working Hub 경로 자동 탐지 ──
 find_hub() {
-  # 1) 이 repo 자체가 working hub면 그대로 사용
-  if [ -f "$REPO_ROOT/scripts/sync-user-scope.mjs" ] && [ -d "$REPO_ROOT/agents" ]; then
+  # 1) 이 repo 자체가 working hub면 그대로 사용.
+  #    release-to-dotfiles.mjs는 working hub에만 존재하는 고유 지표.
+  if [ -f "$REPO_ROOT/scripts/release-to-dotfiles.mjs" ] && [ -d "$REPO_ROOT/agents" ]; then
     echo "$REPO_ROOT"
     return 0
   fi
