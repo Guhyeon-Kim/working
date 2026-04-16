@@ -45,23 +45,29 @@ const MANIFEST = [
   { src: 'skills', dst: 'skills', kind: 'dir' },
   { src: 'scripts/bootstrap.mjs', dst: 'scripts/bootstrap.mjs', kind: 'file' },
   { src: 'scripts/sync-user-scope.mjs', dst: 'scripts/sync-user-scope.mjs', kind: 'file' },
+  { src: 'scripts/sync-shared-agents.mjs', dst: 'scripts/sync-shared-agents.mjs', kind: 'file' },
   { src: 'scripts/setup-plugins.mjs', dst: 'scripts/setup-plugins.mjs', kind: 'file' },
   { src: 'scripts/delegate.mjs', dst: 'scripts/delegate.mjs', kind: 'file' },
   { src: 'scripts/cleanup-repo-hooks.mjs', dst: 'scripts/cleanup-repo-hooks.mjs', kind: 'file' },
   { src: 'settings.json', dst: 'settings.json', kind: 'file' },
 ];
 
+// Windows는 `shell:true`에서 공백 있는 인자(예: -m "멀티워드 커밋 메시지")가
+// 재분할되는 문제가 있어 `cmd.exe /d /s /c`로 명시 래핑한다.
 function git(args, opts = {}) {
-  return spawnSync('git', args, {
+  const spawnCmd = IS_WIN ? 'cmd.exe' : 'git';
+  const spawnArgs = IS_WIN ? ['/d', '/s', '/c', 'git', ...args] : args;
+  return spawnSync(spawnCmd, spawnArgs, {
     cwd: opts.cwd || DOTFILES,
     encoding: 'utf8',
-    shell: IS_WIN,
     stdio: opts.silent ? 'pipe' : 'inherit',
   });
 }
 
 function gitCapture(args, cwd = DOTFILES) {
-  const r = spawnSync('git', args, { cwd, encoding: 'utf8', shell: IS_WIN });
+  const spawnCmd = IS_WIN ? 'cmd.exe' : 'git';
+  const spawnArgs = IS_WIN ? ['/d', '/s', '/c', 'git', ...args] : args;
+  const r = spawnSync(spawnCmd, spawnArgs, { cwd, encoding: 'utf8' });
   return { status: r.status, stdout: (r.stdout || '').trim(), stderr: (r.stderr || '').trim() };
 }
 
