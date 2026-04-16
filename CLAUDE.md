@@ -5,37 +5,52 @@
 
 ---
 
-## 🚀 첫 진입 자동 셋업 (새 머신·공동화 감지)
+## 🚀 첫 진입 자동 셋업 (Windows·Codespace·macOS 공통)
 
-Claude는 이 섹션을 읽는 즉시 다음 조건을 점검한다:
+**원칙: 사용자가 개발 세부를 신경 쓰지 않아도 Claude가 자동으로 셋업을 마친다.**
+Claude Code가 이 repo에서 실행되는 순간, 이 섹션을 읽고 아래 조건을 점검하여 누락을 자가치유한다.
 
-1. `~/.claude/hooks/` 디렉토리가 **존재하고 `.mjs` 파일이 5개 이상** 있는가?
-2. `~/.claude/skills/` 디렉토리가 **존재하고 비어있지 않은가**?
-3. `claude plugin list`에 `gptaku-plugins` 플러그인이 등록돼 있는가?
+### Claude가 자동 점검하는 조건
 
-> **중요 (v6.4)**: 과거 "디렉토리 존재" 여부만 체크하던 조건이 *공동화된 빈 디렉토리*를 정상으로 오판해 한 달째 훅이 죽은 채 방치된 사례가 있었다. 이제는 내용까지 확인한다.
-> 또한 [hooks/_auto-heal.mjs](hooks/_auto-heal.mjs) 훅이 SessionStart 최상단에서 동일 조건을 자동 감지하여 bootstrap을 트리거한다. 이 수동 체크는 이중 방어선.
+1. `~/.claude/hooks/` 에 `.mjs` 파일이 **5개 이상** 있는가?
+2. `~/.claude/skills/` 가 **비어있지 않은가**?
+3. `claude plugin list`에 `gptaku-plugins`가 있는가?
+4. 이 repo의 `core.hooksPath` 가 `.githooks`로 설정돼 있는가? (git pull 자동 sync용)
 
-**하나라도 누락**이면 **집 PC·새 머신 첫 진입 또는 공동화 상태**로 간주하고, 사용자에게 다음과 같이 선제 안내:
+### 하나라도 누락이면
+
+Claude가 사용자에게 한 줄만 물어본다: **"자동 셋업을 진행할까요?"**
+사용자가 "응" / "ok" / "해줘" 등으로 답하면 즉시 실행:
 
 ```
-이 저장소를 처음 여는 머신으로 보입니다. 자동 셋업을 진행할까요?
-
-실행: node scripts/bootstrap.mjs --apply
-수행 내용:
-  1. ~/.claude-config(dotfiles) clone 또는 pull
-  2. 훅·스킬·settings.json user-scope 동기화
-  3. 플러그인 3개(insane-design·insane-search·deep-research) + Python 의존성(Pillow·yt-dlp·feedparser) 설치
-
-재시작 후 모든 기능 활성화.
+node scripts/bootstrap.mjs --apply
 ```
 
-사용자가 승인("응", "ok", "셋업해줘", "집이야" 등)하면 `node scripts/bootstrap.mjs --apply`를 바로 실행한다.
-**미리보기만 원하면** `node scripts/bootstrap.mjs` (플래그 없이) 실행해 현 상태만 진단.
+> 이 명령은 **Windows cmd / PowerShell / Git Bash / Linux / macOS 어디서든 동일**하다. Node.js가 OS별 경로 차이를 흡수.
 
-**자동 실행 허용 근거**: bootstrap은 파괴적 명령 아님 (clone·sync·install만 수행, 기존 파일 덮어쓰기는 sync-user-scope가 관리).
+bootstrap이 알아서 수행하는 것:
+1. `~/.claude-config` (dotfiles) clone 또는 pull
+2. 훅·스킬·`settings.json`을 `~/.claude/`에 복사 (atomic — 중단돼도 기존 파일 보존)
+3. 플러그인 3개 + Python 의존성 설치
+4. **`.githooks` 자동 활성화** → 이후 `git pull` 할 때마다 user-scope 자동 동기화
+5. MCP 서버 등록 안내 (1회 수동 필요한 부분)
 
-모두 정상(`clean`)이면 스킵하고 본 작업으로 진입.
+### 자가치유 이중 방어선
+
+[hooks/_auto-heal.mjs](hooks/_auto-heal.mjs)가 **Claude Code 세션 시작 최상단**에서 동일 조건을 감지해 bootstrap을 자동 호출한다. 사용자가 아무 말도 안 해도 훅이 사라져있으면 세션 시작할 때 자동 복구 시도.
+
+### Windows 특이사항 (사용자가 알아둘 것 없음, Claude가 자동 처리)
+
+- **WSL 권장**: Claude Code는 WSL2 환경에서 가장 안정적으로 동작. 하지만 Windows 네이티브 cmd/PowerShell에서도 위 명령 그대로 실행 가능.
+- **Git for Windows** 필수: `.githooks/post-merge`는 bash 스크립트이므로 Git for Windows에 포함된 Git Bash가 실행. Git for Windows만 설치돼 있으면 자동 동작.
+- **MCP 서버**: `~/.claude.json`은 머신별 독립이므로 Windows 첫 셋업 후 1회 추가 등록 필요. bootstrap 실행 시 출력되는 `claude mcp add ...` 3줄을 복붙하면 끝. (Codespace 토큰은 `%GH_MCP_TOKEN%` 환경변수로)
+
+### 사용자에게 필요한 유일한 행동
+
+- **Claude Code 실행** → 알아서 감지·복구·진행
+- bootstrap이 뜨면 "응"만 답하면 됨
+
+모두 정상이면 자동 셋업 스킵하고 본 작업으로 진입.
 
 ---
 
