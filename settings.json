@@ -42,6 +42,12 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node -e \"const f=require('fs'),o=require('os'),p=require('path'),c=require('child_process');const h=p.join(o.homedir(),'.claude','hooks','_auto-heal.mjs');if(f.existsSync(h)){require('child_process').spawnSync('node',[h],{stdio:'inherit'})}else{const b=p.join(o.homedir(),'.claude-config','scripts','bootstrap.mjs');if(f.existsSync(b)){process.stderr.write('[auto-heal-inline] _auto-heal missing, running bootstrap\\\\n');c.spawnSync('node',[b,'--apply'],{stdio:'inherit',shell:process.platform==='win32'})}else{process.stderr.write('[auto-heal-inline] dotfiles missing — git clone https://github.com/Guhyeon-Kim/dotfiles.git ~/.claude-config\\\\n')}}\"",
+            "timeout": 120,
+            "statusMessage": "훅 자가치유 점검..."
+          },
+          {
+            "type": "command",
             "command": "node \"__HOME__/.claude/hooks/session-start-memory.mjs\"",
             "timeout": 10,
             "statusMessage": "메모리 로딩 중..."

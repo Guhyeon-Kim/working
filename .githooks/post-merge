@@ -1,0 +1,26 @@
+#!/bin/sh
+# Working Hub 하네스 자동 동기화 (git pull / git merge 후 실행).
+#
+# 역할: repo에 들어온 hooks/·skills/·settings.json 변경사항을 이 머신의
+#       ~/.claude/ 로 즉시 반영. 사용자가 `git pull` 이후 별도로
+#       `node scripts/sync-user-scope.mjs`를 실행할 필요를 제거한다.
+#
+# 크로스 플랫폼: Git for Windows의 Git Bash에서도 동일하게 실행된다.
+# 비파괴: sync-user-scope는 atomic rename 방식이므로 실패 시 기존 user-scope 보존.
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "[post-merge] node 미설치 — sync 스킵. 수동으로 실행 필요:" >&2
+  echo "  node scripts/sync-user-scope.mjs" >&2
+  exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+if [ -z "$REPO_ROOT" ] || [ ! -f "$REPO_ROOT/scripts/sync-user-scope.mjs" ]; then
+  exit 0
+fi
+
+echo "[post-merge] user-scope 동기화 실행..."
+node "$REPO_ROOT/scripts/sync-user-scope.mjs" || {
+  echo "[post-merge] sync 실패 — 수동 확인 필요: node scripts/sync-user-scope.mjs" >&2
+  exit 0
+}

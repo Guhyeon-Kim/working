@@ -23,9 +23,10 @@
  */
 
 import { spawnSync } from 'child_process';
-import { existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { existsSync, mkdirSync, readdirSync, chmodSync } from 'fs';
+import { join, dirname } from 'path';
 import { homedir, platform } from 'os';
+import { fileURLToPath } from 'url';
 
 const APPLY = process.argv.includes('--apply');
 const PLATFORM = platform();
@@ -79,11 +80,22 @@ if (missing.length) {
 }
 
 // ─── 2. 상태 진단 ───
+// "디렉토리 존재"만 체크하면 공동화된(빈) 디렉토리를 정상으로 오판한다.
+// 파일 개수까지 봐야 과거 sync 중단·삭제로 훅이 사라진 상태를 감지.
+function isHealthyDir(dir) {
+  if (!existsSync(dir)) return false;
+  try {
+    return readdirSync(dir).length > 0;
+  } catch {
+    return false;
+  }
+}
+
 const state = {
   dotfilesExists: existsSync(DOTFILES_DIR),
   claudeDirExists: existsSync(CLAUDE_DIR),
-  hooksExists: existsSync(join(CLAUDE_DIR, 'hooks')),
-  skillsExists: existsSync(join(CLAUDE_DIR, 'skills')),
+  hooksHealthy: isHealthyDir(join(CLAUDE_DIR, 'hooks')),
+  skillsHealthy: isHealthyDir(join(CLAUDE_DIR, 'skills')),
   settingsExists: existsSync(join(CLAUDE_DIR, 'settings.json')),
 };
 
@@ -96,10 +108,17 @@ state.gptakuInstalled = gptakuInstalled;
 
 log('현재 상태:', state);
 
+// git hooks가 활성화돼 있는지도 확인 (working repo 기준)
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const WORKING_REPO = dirname(SCRIPT_DIR);
+const hooksPathOk = existsSync(join(WORKING_REPO, '.git'))
+  && run('git', ['config', '--get', 'core.hooksPath'], { capture: true, cwd: WORKING_REPO }).stdout?.trim() === '.githooks';
+
 const needsDotfiles = !state.dotfilesExists;
-const needsSync = !state.hooksExists || !state.skillsExists || !state.settingsExists;
+const needsSync = !state.hooksHealthy || !state.skillsHealthy || !state.settingsExists;
 const needsPlugins = !gptakuInstalled;
-const clean = !needsDotfiles && !needsSync && !needsPlugins;
+const needsGitHooks = existsSync(join(WORKING_REPO, '.githooks')) && !hooksPathOk;
+const clean = !needsDotfiles && !needsSync && !needsPlugins && !needsGitHooks;
 
 if (clean) {
   log('모든 항목 정상. 추가 작업 불필요.');
@@ -110,6 +129,7 @@ log('필요 작업:');
 if (needsDotfiles) log('  • dotfiles 레포 clone');
 if (needsSync) log('  • user-scope 동기화 (훅·스킬·settings.json)');
 if (needsPlugins) log('  • gptaku 플러그인 3개 + Python 의존성 설치');
+if (needsGitHooks) log('  • git hooks 활성화 (git pull 후 자동 sync)');
 
 if (!APPLY) {
   log('');
@@ -151,9 +171,42 @@ if (existsSync(pluginsScript)) {
   warn(`setup-plugins.mjs 없음 (${pluginsScript})`);
 }
 
-// ─── 6. 마무리 ───
+// ─── 6. Git hooks 설치 (git pull 후 자동 sync) ───
+// 사용자가 Windows/Codespace에서 `git pull` 하면 post-merge 훅이 자동으로
+// sync-user-scope를 호출해 user-scope를 최신 상태로 유지한다.
+function setupGitHooks(repoDir) {
+  const githooks = join(repoDir, '.githooks');
+  if (!existsSync(githooks)) return false;
+
+  // core.hooksPath 설정 (이미 올바르면 skip)
+  const curr = run('git', ['config', '--get', 'core.hooksPath'], { capture: true, cwd: repoDir });
+  if (curr.stdout?.trim() !== '.githooks') {
+    const r = run('git', ['config', 'core.hooksPath', '.githooks'], { cwd: repoDir });
+    if (r.status === 0) log(`${repoDir}: core.hooksPath = .githooks 설정`);
+    else warn(`${repoDir}: core.hooksPath 설정 실패`);
+  }
+
+  // 실행 권한 부여 (Linux/macOS). Windows Git Bash는 실행 비트 없어도 hook 실행.
+  if (!IS_WIN) {
+    for (const name of ['post-merge', 'post-checkout']) {
+      const p = join(githooks, name);
+      if (existsSync(p)) {
+        try { chmodSync(p, 0o755); } catch (e) { warn(`chmod 실패: ${p} (${e.message})`); }
+      }
+    }
+  }
+  return true;
+}
+
+if (APPLY) {
+  if (setupGitHooks(WORKING_REPO)) log('working repo git hooks 활성화');
+  if (existsSync(DOTFILES_DIR) && setupGitHooks(DOTFILES_DIR)) log('dotfiles git hooks 활성화');
+}
+
+// ─── 7. 마무리 ───
 log('');
 log('✔ 셋업 완료. Claude Code를 재시작하면 모든 기능이 활성화됩니다.');
+log('ℹ 이후 `git pull` 시 user-scope 자동 동기화됩니다.');
 if (IS_WIN) {
   log('Windows: Claude Code 자체는 WSL2 실행 권장 (공식 안내).');
 }

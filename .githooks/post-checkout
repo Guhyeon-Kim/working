@@ -1,0 +1,27 @@
+#!/bin/sh
+# 브랜치 전환 시에도 user-scope 동기화.
+# post-checkout args: $1=prev HEAD, $2=new HEAD, $3=flag (1=branch, 0=file)
+# branch checkout일 때만 실행 (개별 파일 checkout마다 돌면 과함).
+
+[ "$3" = "1" ] || exit 0
+
+if ! command -v node >/dev/null 2>&1; then
+  exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+if [ -z "$REPO_ROOT" ] || [ ! -f "$REPO_ROOT/scripts/sync-user-scope.mjs" ]; then
+  exit 0
+fi
+
+# 브랜치 전환 후 hooks/·skills/·settings.json에 변경이 있으면만 실행
+CHANGED=$(git diff --name-only "$1" "$2" 2>/dev/null | grep -E "^(hooks|skills)/|^settings\.json$" | head -1)
+if [ -z "$CHANGED" ]; then
+  exit 0
+fi
+
+echo "[post-checkout] 하네스 파일 변경 감지 — user-scope 동기화..."
+node "$REPO_ROOT/scripts/sync-user-scope.mjs" || {
+  echo "[post-checkout] sync 실패 — 수동 확인 필요" >&2
+  exit 0
+}

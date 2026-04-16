@@ -5,7 +5,15 @@
 ## 개요
 
 이 Working Hub repo(`/workspaces/working/`) 전체가 하네스 소스다.
-대상 repo에 필요한 구성 요소를 선별하여 복사·맞춤 조정한다.
+대상 repo에는 **repo-specific 파일만** 복사한다. 훅·스킬은 user-scope(`~/.claude/hooks/`, `~/.claude/skills/`) 한 곳만 사용하므로 **repo에 복사하지 않는다**.
+
+## 정책 (v6.4 — 2026-04-16 개정)
+
+**훅·스킬은 user-scope 단일 소스**. 과거처럼 모든 repo에 hooks/·skills/를 복사하면 Working Hub 하나 업데이트마다 N개 repo를 모두 고쳐야 해서 전파 비용이 폭증했다. 이제는:
+
+- user-scope `~/.claude/hooks/`, `~/.claude/skills/`가 master. `sync-user-scope.mjs` 한 번 실행으로 같은 머신의 **모든 프로젝트에 즉시 반영**.
+- 대상 repo는 `CLAUDE.md`, `.claude/agents/`, `.claude/commands/` 등 **프로젝트별 커스터마이징**만 가진다.
+- 이미 repo에 `hooks/`·`skills/`가 복사된 레거시 프로젝트는 `node /workspaces/working/scripts/cleanup-repo-hooks.mjs <repo>` 로 제거.
 
 ## 소스 맵 (이 repo → 대상 repo)
 
@@ -14,8 +22,8 @@
 | `agents/*.md` | `.claude/agents/` | 프로젝트 유형별 선별 복사 |
 | `agents/memory/` | `.claude/agents/memory/` | evolving-rules.json 빈 상태로 초기화 |
 | `agents/delegation_workflow.md` | `.claude/agents/` | 오케스트레이션 허브 |
-| `hooks/*.mjs` | `hooks/` | 핵심 훅 3개 필수 복사 |
-| `skills/*/SKILL.md` | `skills/` | 프로젝트 유형별 선별 복사 |
+| ~~`hooks/*.mjs`~~ | ~~`hooks/`~~ | **복사 금지** — user-scope 사용 |
+| ~~`skills/*/SKILL.md`~~ | ~~`skills/`~~ | **복사 금지** — user-scope 사용 |
 | `.claude/commands/project/*.md` | `.claude/commands/project/` | 커맨드 복사 (patch 제외) |
 | `scripts/delegate.mjs` | `scripts/` | 위임 래퍼 |
 | `.gitignore` (세션 부분) | `.gitignore` (append) | 세션 임시 파일 규칙 추가 |
@@ -49,14 +57,12 @@ Working Hub의 CLAUDE.md를 참고하되, 대상 프로젝트에 맞게 **새로
 
 공통 필수: delegation_workflow.md, memory/ (빈 evolving-rules.json)
 
-### 4단계: 훅 복사 (필수 3개)
-- `session-start-memory.mjs` — 세션 시작 메모리 로딩 + 턴 카운터 리셋
-- `on-prompt-unified.mjs` — CLI 체크 + 품질 GC + 위험 감지 + Context Rot 방지
-- `evolving-guardrails.mjs` — 반복 에러 축적 + hookify 자동 트리거
+### 4단계: 훅·스킬 (복사 없음, user-scope 확인만)
+**복사하지 않는다.** 대신 `node /workspaces/working/scripts/bootstrap.mjs`를 실행해 user-scope가 정상인지 확인:
+- `~/.claude/hooks/*.mjs` 5개 이상 + `_auto-heal.mjs` 존재
+- `~/.claude/skills/` 비어있지 않음
 
-### 5단계: 스킬 선별 복사
-공통 필수: planning, self-review, error-handling, project-log, dependency-check
-프로젝트별: wireframe, flowchart, ui-component, design-system, api-contract
+빠져있으면 `--apply`로 복구. 대상 repo에는 `hooks/`·`skills/` 디렉토리를 만들지 않는다.
 
 ### 6단계: 설정 적용
 - settings.json에 훅 등록 + Agent Teams 활성화

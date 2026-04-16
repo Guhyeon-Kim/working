@@ -1,19 +1,22 @@
 # CLAUDE.md — Working Hub
 
 > HubWise/BiLevel 제외, 모든 작업의 중앙 허브 (회사/개인/일정)
-> Claude Code Dotfiles v6.3 | 최종 업데이트: 2026-04-14
+> Claude Code Dotfiles v6.4 | 최종 업데이트: 2026-04-16
 
 ---
 
-## 🚀 첫 진입 자동 셋업 (새 머신 감지)
+## 🚀 첫 진입 자동 셋업 (새 머신·공동화 감지)
 
 Claude는 이 섹션을 읽는 즉시 다음 조건을 점검한다:
 
-1. `~/.claude/hooks/` 디렉토리가 존재하는가?
-2. `~/.claude/skills/` 디렉토리가 존재하는가?
+1. `~/.claude/hooks/` 디렉토리가 **존재하고 `.mjs` 파일이 5개 이상** 있는가?
+2. `~/.claude/skills/` 디렉토리가 **존재하고 비어있지 않은가**?
 3. `claude plugin list`에 `gptaku-plugins` 플러그인이 등록돼 있는가?
 
-**하나라도 누락**이면 **집 PC·새 머신 첫 진입**으로 간주하고, 사용자에게 다음과 같이 선제 안내:
+> **중요 (v6.4)**: 과거 "디렉토리 존재" 여부만 체크하던 조건이 *공동화된 빈 디렉토리*를 정상으로 오판해 한 달째 훅이 죽은 채 방치된 사례가 있었다. 이제는 내용까지 확인한다.
+> 또한 [hooks/_auto-heal.mjs](hooks/_auto-heal.mjs) 훅이 SessionStart 최상단에서 동일 조건을 자동 감지하여 bootstrap을 트리거한다. 이 수동 체크는 이중 방어선.
+
+**하나라도 누락**이면 **집 PC·새 머신 첫 진입 또는 공동화 상태**로 간주하고, 사용자에게 다음과 같이 선제 안내:
 
 ```
 이 저장소를 처음 여는 머신으로 보입니다. 자동 셋업을 진행할까요?
@@ -41,6 +44,15 @@ Claude는 이 섹션을 읽는 즉시 다음 조건을 점검한다:
 이 저장소는 코드 구현 저장소가 아닌 **작업 컨트롤 타워**.
 리서치, 기획, 산출물 작성, 외부 서비스 연동, 프로젝트 관리를 여기서 수행한다.
 실제 코드 프로젝트는 필요 시 별도 repo를 생성한다.
+
+## 두 repo의 역할 분리 (v6.4 — 2026-04-16 명문화)
+
+| repo | 용도 | 업데이트 |
+|---|---|---|
+| **working** (이 repo) | 살아있는 개발·전파 hub. 기존 머신·프로젝트는 `git pull` 시 `.githooks/post-merge`가 `sync-user-scope.mjs`를 자동 호출해 user-scope에 즉시 반영. | 일상 커밋 |
+| **dotfiles** (`~/.claude-config`) | **신규 머신 초기 셋업 templates 전용**. hooks·skills·최소 scripts·settings.json 템플릿만 보유. 신규 머신이 `install.sh` → `bootstrap.mjs`로 환경을 처음 구축할 때 사용. | working 안정화 시 `node scripts/release-to-dotfiles.mjs --push`로 반자동 릴리즈 |
+
+**핵심**: 기존 머신 반영은 working만으로 충분. dotfiles는 새 머신을 위한 보관소. 두 repo가 drift나더라도 release 스크립트로 주기적 sync.
 
 ## 언어
 

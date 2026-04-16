@@ -22,7 +22,7 @@
  *   - 기존 settings.json의 permissions/enabledPlugins 등은 유지
  */
 
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, copyFileSync, existsSync, rmSync, cpSync, realpathSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, copyFileSync, existsSync, rmSync, cpSync, realpathSync, renameSync } from 'fs';
 import { join, dirname, relative, sep, resolve } from 'path';
 import { homedir, platform } from 'os';
 import { fileURLToPath } from 'url';
@@ -59,8 +59,10 @@ function countFiles(dir) {
   return n;
 }
 
-function copyDir(src, dst, opts = {}) {
-  const { clean = false } = opts;
+// Atomic 복사: src → tmp → rename(dst) 으로 중간 실패 시에도 dst 공동화 방지.
+// 과거 `clean:true` 방식이 `rmSync(dst)` 직후 `cpSync` 중단되면 빈 폴더가 남아
+// 자기감지 구조를 무력화시키던 근본 버그를 교체.
+function copyDir(src, dst) {
   if (!existsSync(src)) {
     warn(`source 없음: ${src} — 스킵`);
     return { copied: 0 };
@@ -71,28 +73,51 @@ function copyDir(src, dst, opts = {}) {
   }
   const srcFileCount = countFiles(src);
   if (srcFileCount === 0) {
-    warn(`source가 비어있음: ${src} — clean 건너뜀 (기존 dst 보존)`);
+    warn(`source가 비어있음: ${src} — 스킵 (기존 dst 보존)`);
     return { copied: 0 };
   }
 
-  if (clean && existsSync(dst)) {
-    // dst가 심볼릭링크/파일이어도 안전하게 제거 (cpSync 요구사항)
-    rmSync(dst, { recursive: true, force: true });
-  }
   mkdirSync(dirname(dst), { recursive: true });
 
-  // Node 16.7+ 내장. Windows/Unicode 경로 처리가 수동 재귀보다 안정적.
-  cpSync(src, dst, { recursive: true, force: true, errorOnExist: false });
-  return { copied: countFiles(dst) };
+  const stamp = Date.now();
+  const tmpDst = `${dst}.sync-${stamp}`;
+  const bakDst = `${dst}.bak-${stamp}`;
+
+  try {
+    cpSync(src, tmpDst, { recursive: true, force: true, errorOnExist: false });
+
+    const hadExisting = existsSync(dst);
+    if (hadExisting) renameSync(dst, bakDst);
+
+    try {
+      renameSync(tmpDst, dst);
+    } catch (e) {
+      if (hadExisting && existsSync(bakDst)) {
+        try { renameSync(bakDst, dst); } catch {}
+      }
+      throw e;
+    }
+
+    if (hadExisting && existsSync(bakDst)) {
+      rmSync(bakDst, { recursive: true, force: true });
+    }
+    return { copied: countFiles(dst) };
+  } catch (e) {
+    if (existsSync(tmpDst)) {
+      try { rmSync(tmpDst, { recursive: true, force: true }); } catch {}
+    }
+    warn(`복사 실패 (${src} → ${dst}): ${e.message}`);
+    return { copied: 0 };
+  }
 }
 
 // ─── 1. hooks 동기화 ───
 log(`플랫폼: ${PLATFORM}  |  홈: ${HOME}  |  타겟: ${TARGET}`);
-const hooksResult = copyDir(join(REPO_ROOT, 'hooks'), join(TARGET, 'hooks'), { clean: true });
+const hooksResult = copyDir(join(REPO_ROOT, 'hooks'), join(TARGET, 'hooks'));
 log(`hooks/ 동기화 완료 (${hooksResult.copied}개 파일)`);
 
 // ─── 2. skills 동기화 ───
-const skillsResult = copyDir(join(REPO_ROOT, 'skills'), join(TARGET, 'skills'), { clean: true });
+const skillsResult = copyDir(join(REPO_ROOT, 'skills'), join(TARGET, 'skills'));
 log(`skills/ 동기화 완료 (${skillsResult.copied}개 파일)`);
 
 // ─── 3. 전역 CLAUDE.md 동기화 ───
