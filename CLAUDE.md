@@ -181,15 +181,23 @@ bootstrap이 알아서 수행하는 것:
 
 ---
 
-## 에이전트 파이프라인 (5단계)
+## 코어 에이전트 7개 (v6.5 감축 완료)
 
-```
-[1] 리서치·기획  — research-agent(Gemini) → pm-agent → CEO 컨펌
-[2] 설계        — design-agent → data-agent (스키마+API 계약)
-[3] 구현        — frontend-agent + backend-agent (Codex CLI 경유)
-[4] 검증        — qa-agent(BLOCK/PASS) + security-agent(STRIDE)
-[5] 배포        — infra-agent → post-push-hook → 헬스체크
-```
+고정 파이프라인이 아닌 **동적 팀 편성**. 아래 7명은 고유 관점이 있어 유지, 나머지는 `agents/legacy/`·`agents/project-specific/`로 이동.
+
+| 에이전트 | 고유 관점 | 호출 시점 |
+|---|---|---|
+| **pm-agent** | 요건정의·예외·리스크 선제 설계 | 새 기능·기획 시작 |
+| **research-agent** | 4축 리서치 라우터 | 조사·벤치마킹 |
+| **data-agent** | DB 스키마 + API 계약 | 구현 전 설계 |
+| **qa-agent** | BLOCK/PASS 판정, Playwright E2E | 배포 전 |
+| **security-agent** | STRIDE·CVSS·RLS | 신규 기능 + 정기 |
+| **infra-agent** | Supabase/Vercel 비용·80% 임계 | 배포 시·월 1회 |
+| **marketing-agent** | UA·리텐션·카피 | 출시 전후 |
+
+**기획·설계·구현·리뷰 같은 공통 역할은 에이전트 파일이 아닌 [스킬 템플릿](skills/)으로 저장**. Claude가 작업마다 필요한 스킬을 즉석 조합하여 **동적 팀**을 편성한다. 팀은 작업 완료 시 해산 (컨텍스트 정리).
+
+상세 프로토콜: [agents/delegation_workflow.md](agents/delegation_workflow.md)
 
 ## 멀티 AI 체계
 
@@ -198,6 +206,8 @@ bootstrap이 알아서 수행하는 것:
 | Claude Code (Opus) | CTO 오케스트레이션, 최종 판단 | 직접 |
 | Gemini CLI | 리서치, 기획 초안, 디자인 초안 | `delegate.mjs gemini` |
 | Codex CLI | 소스 코드 구현 | `delegate.mjs codex` |
+
+**임계치·판단 기준은 위 §🎯 작업 라우팅 & 실행 원칙 참고.**
 
 ### Gemini 모델 체인 정책 (2026-04-13 기준)
 
@@ -370,25 +380,69 @@ ultraplan으로 진행할까요?
 - "배포 끝나면 알려줘" → `/loop` 제안
 - "매일 아침 PR 확인" → Scheduled Tasks 안내
 
-## Agent Teams 자동 관리
+## 동적 팀 기본 (v6.5 — Agent Teams 진화형)
 
-실제 코드 프로젝트 repo에서 복잡한 구현 작업 시, Claude가 작업 성격을 판단하여 팀을 자동 구성한다.
+**기본 원칙**: 공통 역할은 에이전트 파일로 박지 않고 **작업마다 즉석 편성**. Working Hub에서든 프로젝트 repo에서든 동일.
 
-**자동 제안 기준:**
-- 3개 이상 독립 모듈/파일을 동시에 수정해야 할 때
-- 프론트엔드 + 백엔드 + 테스트를 병렬로 진행할 때
-- 멀티 관점 리뷰가 필요할 때
+**동적 팀 자동 편성 기준:**
+- 3개 이상 독립 모듈·파일을 병렬 수정
+- 기획+구현+QA 관점을 동시에 보는 게 이득인 작업
+- 여러 스킬 템플릿 조합으로 해결 가능
 
 **Claude가 하는 일:**
-1. 작업 분석 → 병렬화 가능 여부 판단
-2. 팀원 수/역할 동적 결정 (3~5명 권장)
-3. 사용자에게 구성안 제안 → 승인 후 실행
-4. 팀 생성 → 태스크 분배 → 진행 모니터링 → 결과 취합 → 팀 정리
+1. 작업 분석 → 병렬성·관점 다양성 이득 판단
+2. 필요한 역할 조합 결정 (스킬 템플릿 기반)
+3. **외부 영향 없으면 즉시 편성**, 있으면 사용자 승인
+4. 팀 파견 → 결과 취합·검증 → 팀 해산 (컨텍스트 정리)
+5. 사용자에게 요약 보고 (무엇·누가·어디·다음)
 
-**제안하지 않는 경우:**
-- 단일 파일 수정, 순차적 의존성이 강한 작업
-- 기획/리서치 단계 (서브에이전트가 더 효율적)
-- 이 Working Hub repo에서의 작업 (코드 구현이 아니므로)
+**고정 에이전트 파일과의 관계:**
+- 고정: 7개 코어 에이전트 (pm, qa, security 등 고유 관점 있는 것만)
+- 동적: 공통 역할 (기획·구현·리뷰 등)은 스킬 템플릿 조합
+
+## Notion 자동 기록 원칙 (v6.5)
+
+프로젝트 관련 작업이 완료되면 Claude는 **관련 Notion 페이지에 자동 기록**한다.
+
+**자동 기록 대상 프로젝트** (감지 키워드):
+- 허브와이즈 / HubWise
+- B무거나
+- 티스토리 (블로그 관련)
+- 팀 프로젝트 (명시적 언급 시)
+- 여행 일정 / 여행 계획
+- 일정·캘린더 관련 요청
+
+**기록 포맷**:
+```
+[YYYY-MM-DD HH:mm] 작업 제목
+담당: Codex / Gemini / Claude 직접
+결과: 한 문단 요약
+파일·링크: ...
+다음 할 일: (있으면)
+```
+
+**자동 기록 대상 아님**: 일반 대화, 단순 조회, 실패한 시도. 사용자에게 "Notion에 기록할까요?" 묻지 않음 — 위 조건이면 자동, 아니면 생략.
+
+MCP 툴: `mcp__claude_ai_Notion__notion-create-pages` / `notion-update-page`.
+
+## 태블릿·모바일 워크플로우 (v6.5)
+
+**플랫폼 조합**:
+- **Claude Code (VSCode extension)** — Codespace·Windows 로컬 양쪽
+- **Claude Code 웹 (claude.ai/code)** — 태블릿·폰에서 세션 이어가기
+- **Remote Control** (`/remote-control` 또는 `claude --rc`) — 진행 중 Codespace 세션을 모바일에서 이어받기
+
+**태블릿 사용 시 Claude 행동 지침**:
+- 긴 코드 생성·파일 편집이 필요하면 **Codex 위임이 기본** (태블릿에서 Claude가 직접 쓰면 실수 증가)
+- 긴 리서치·장문 분석은 **Gemini 위임**
+- Claude는 **지휘·판단·정리**만 — 모바일에서도 가볍게 유지
+- 결과 정리는 **Notion 자동 기록**으로 남겨 나중에 PC에서 이어받기 편하게
+
+**환경 감지 힌트** (Claude가 인지 가능한 신호):
+- SSH_CONNECTION, TERM_PROGRAM 등 환경변수로 터미널 폭 판단 → 좁으면 모바일 모드
+- 사용자가 짧은 메시지만 보내면 모바일로 간주 → 응답도 간결하게
+
+**외부 통신** (선택): `channels` 플러그인으로 Telegram·Discord 알림. CI 결과·장시간 작업 완료 통지 등.
 
 ## 크로스 플랫폼 동기화
 

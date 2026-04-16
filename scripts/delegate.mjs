@@ -91,8 +91,32 @@ if (!cli || !target || !task) {
 예시:
   node delegate.mjs codex frontend "로그인 페이지 구현"
   node delegate.mjs gemini research "경쟁사 QR 결제 서비스 분석"
+
+v6.5 라우팅 원칙 (CLAUDE.md §🎯 참고):
+  Codex  = 신규 30줄+ 코드, 다중 파일 수정·리팩터·테스트 생성
+  Gemini = 장문 리서치, PDF·이미지·영상, 검색 결합 리서치
+  Claude = 30줄 이하 수정, MCP 호출, 한국어 문서, 의사결정
 `);
   process.exit(1);
+}
+
+// ─── v6.5 라우팅 힌트 로그 ───
+// 위임 순간 "왜 이 AI인지" 표시해서 추후 잘못된 위임을 사용자가 캐치 가능하게.
+const ROUTING_HINTS = {
+  codex: {
+    frontend: '프론트엔드 구현 → Codex (30줄+ 코드·다중 파일 일관성)',
+    backend: '백엔드 구현 → Codex (API·스키마 일관성)',
+  },
+  gemini: {
+    research: '장문 리서치 → Gemini (2M 컨텍스트·검색 결합)',
+    design: '디자인 레퍼런스 → Gemini (멀티모달·이미지)',
+    education: '교육 콘텐츠 → Gemini (장문·트렌드)',
+    marketing: '마케팅 카피·전략 → Gemini (장문·검색)',
+  },
+};
+const hint = ROUTING_HINTS[cli]?.[target];
+if (hint) {
+  console.error(`[delegate][v6.5] ${hint}`);
 }
 
 // ─── 유틸리티 ───
