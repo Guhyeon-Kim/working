@@ -70,7 +70,9 @@ function getPipCommand() {
 }
 
 function getPythonCommand() {
-  for (const candidate of ['python3', 'python']) {
+  // Windows는 py 런처가 표준이고, `python`/`python3`은 MS Store 스텁(exit 49)일 수 있음.
+  // 우선순위: python3 → python → py (Windows 호환)
+  for (const candidate of ['python3', 'python', 'py']) {
     if (checkAvailable(candidate)) return candidate;
   }
   return null;

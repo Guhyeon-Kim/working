@@ -65,7 +65,7 @@ const checks = {
   claude: available('claude'),
   node: available('node'),
   git: available('git'),
-  python: available('python3') || available('python'),
+  python: available('python3') || available('python') || available('py'),
   pip: available('pip3') || available('pip'),
 };
 log('도구 가용성:', checks);

@@ -59,9 +59,23 @@ function countFiles(dir) {
   return n;
 }
 
+// 개별 파일 복사 fallback: cpSync(recursive)가 Windows+한글 경로에서
+// `\\?\...sync-TIMESTAMP` 임시 경로에 Access denied로 실패하는 케이스를 위함.
+// atomic 보장은 포기하지만 실제로 파일을 제자리에 덮어쓰기 때문에 Windows에서 동작.
+function copyDirInPlace(src, dst) {
+  mkdirSync(dst, { recursive: true });
+  for (const entry of readdirSync(src, { withFileTypes: true })) {
+    const sPath = join(src, entry.name);
+    const dPath = join(dst, entry.name);
+    if (entry.isDirectory()) copyDirInPlace(sPath, dPath);
+    else copyFileSync(sPath, dPath);
+  }
+}
+
 // Atomic 복사: src → tmp → rename(dst) 으로 중간 실패 시에도 dst 공동화 방지.
 // 과거 `clean:true` 방식이 `rmSync(dst)` 직후 `cpSync` 중단되면 빈 폴더가 남아
 // 자기감지 구조를 무력화시키던 근본 버그를 교체.
+// Windows+한글 경로에서 atomic 경로가 막히면 개별 파일 복사 fallback으로 전환.
 function copyDir(src, dst) {
   if (!existsSync(src)) {
     warn(`source 없음: ${src} — 스킵`);
@@ -106,8 +120,14 @@ function copyDir(src, dst) {
     if (existsSync(tmpDst)) {
       try { rmSync(tmpDst, { recursive: true, force: true }); } catch {}
     }
-    warn(`복사 실패 (${src} → ${dst}): ${e.message}`);
-    return { copied: 0 };
+    warn(`atomic 복사 실패 (${e.message}) — 개별 파일 복사 fallback 시도`);
+    try {
+      copyDirInPlace(src, dst);
+      return { copied: countFiles(dst) };
+    } catch (fallbackErr) {
+      warn(`fallback도 실패 (${src} → ${dst}): ${fallbackErr.message}`);
+      return { copied: 0 };
+    }
   }
 }
 

@@ -77,11 +77,13 @@ bootstrap이 알아서 수행하는 것:
 
 ```
 /workspaces/working/
-├── agents/              # 15개 전문 에이전트 (.md)
+├── agents/              # 7개 핵심 에이전트 (.md) — v6.5에서 감축
 │   ├── delegation_workflow.md  # 오케스트레이션 허브 v5.3
-│   └── memory/          # 누적 학습 (failure-cases, success-patterns 등)
+│   ├── memory/          # 누적 학습 (failure-cases, success-patterns 등)
+│   ├── legacy/          # 4개 아카이브 (backend/context/design/frontend)
+│   └── project-specific/ # 3개 (invest-content/education/trading)
 ├── skills/              # 19개 스킬 (SKILL.md) — truth source
-├── hooks/               # 13개 훅 (.mjs/.sh) — truth source, settings.json은 user 경로 참조
+├── hooks/               # 15개 훅 (.mjs/.sh) — truth source, settings.json은 user 경로 참조
 ├── docs/                # 문서 (에이전트-셋팅.md 등)
 ├── .claude/             # Claude Code 상태 파일
 │   ├── commands/project/ # 커스텀 슬래시 커맨드 (/project:*)
