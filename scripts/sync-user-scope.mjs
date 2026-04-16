@@ -22,8 +22,8 @@
  *   - 기존 settings.json의 permissions/enabledPlugins 등은 유지
  */
 
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, copyFileSync, existsSync, rmSync } from 'fs';
-import { join, dirname, relative, sep } from 'path';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, copyFileSync, existsSync, rmSync, cpSync, realpathSync, renameSync } from 'fs';
+import { join, dirname, relative, sep, resolve } from 'path';
 import { homedir, platform } from 'os';
 import { fileURLToPath } from 'url';
 
@@ -37,47 +37,108 @@ const log = (...args) => console.log('[sync]', ...args);
 const warn = (...args) => console.warn('[sync][경고]', ...args);
 
 // ─── 유틸 ───
-function copyDir(src, dst, opts = {}) {
-  const { clean = false, _isRoot = true } = opts;
-  if (!existsSync(src)) return { copied: 0, skipped: false };
-
-  // 루트 호출에서 src가 비어 있으면 dst 보존 (git checkout 미완료 등 비정상 상태 방어)
-  if (_isRoot && readdirSync(src).length === 0) {
-    warn(`${src} 비어 있음 — dst(${dst}) 유지. 'git checkout HEAD -- <dir>' 후 재실행하세요.`);
-    return { copied: 0, skipped: true };
+// Windows + 한글 경로 버그 회피: 수동 재귀 대신 Node 내장 cpSync 사용.
+// src/dst가 같은 실경로를 가리키면 clean 단계에서 source가 삭제되는 사고 방지.
+function samePath(a, b) {
+  try {
+    return realpathSync(a) === realpathSync(b);
+  } catch {
+    return resolve(a) === resolve(b);
   }
+}
 
-  if (clean && existsSync(dst)) {
-    // 대상 디렉토리 내용만 비우고 (dst 자체는 유지) 재복사
-    for (const entry of readdirSync(dst)) {
-      rmSync(join(dst, entry), { recursive: true, force: true });
-    }
+function countFiles(dir) {
+  if (!existsSync(dir)) return 0;
+  let n = 0;
+  for (const entry of readdirSync(dir)) {
+    const p = join(dir, entry);
+    const st = statSync(p);
+    if (st.isDirectory()) n += countFiles(p);
+    else n++;
   }
+  return n;
+}
+
+// 개별 파일 복사 fallback: cpSync(recursive)가 Windows+한글 경로에서
+// `\\?\...sync-TIMESTAMP` 임시 경로에 Access denied로 실패하는 케이스를 위함.
+// atomic 보장은 포기하지만 실제로 파일을 제자리에 덮어쓰기 때문에 Windows에서 동작.
+function copyDirInPlace(src, dst) {
   mkdirSync(dst, { recursive: true });
+  for (const entry of readdirSync(src, { withFileTypes: true })) {
+    const sPath = join(src, entry.name);
+    const dPath = join(dst, entry.name);
+    if (entry.isDirectory()) copyDirInPlace(sPath, dPath);
+    else copyFileSync(sPath, dPath);
+  }
+}
 
-  let copied = 0;
-  for (const entry of readdirSync(src)) {
-    const s = join(src, entry);
-    const d = join(dst, entry);
-    const stat = statSync(s);
-    if (stat.isDirectory()) {
-      copied += copyDir(s, d, { _isRoot: false }).copied;
-    } else {
-      copyFileSync(s, d);
-      copied++;
+// Atomic 복사: src → tmp → rename(dst) 으로 중간 실패 시에도 dst 공동화 방지.
+// 과거 `clean:true` 방식이 `rmSync(dst)` 직후 `cpSync` 중단되면 빈 폴더가 남아
+// 자기감지 구조를 무력화시키던 근본 버그를 교체.
+// Windows+한글 경로에서 atomic 경로가 막히면 개별 파일 복사 fallback으로 전환.
+function copyDir(src, dst) {
+  if (!existsSync(src)) {
+    warn(`source 없음: ${src} — 스킵`);
+    return { copied: 0 };
+  }
+  if (existsSync(dst) && samePath(src, dst)) {
+    warn(`src와 dst가 동일 경로: ${src} — 위험, 스킵 (source 보호)`);
+    return { copied: 0 };
+  }
+  const srcFileCount = countFiles(src);
+  if (srcFileCount === 0) {
+    warn(`source가 비어있음: ${src} — 스킵 (기존 dst 보존)`);
+    return { copied: 0 };
+  }
+
+  mkdirSync(dirname(dst), { recursive: true });
+
+  const stamp = Date.now();
+  const tmpDst = `${dst}.sync-${stamp}`;
+  const bakDst = `${dst}.bak-${stamp}`;
+
+  try {
+    cpSync(src, tmpDst, { recursive: true, force: true, errorOnExist: false });
+
+    const hadExisting = existsSync(dst);
+    if (hadExisting) renameSync(dst, bakDst);
+
+    try {
+      renameSync(tmpDst, dst);
+    } catch (e) {
+      if (hadExisting && existsSync(bakDst)) {
+        try { renameSync(bakDst, dst); } catch {}
+      }
+      throw e;
+    }
+
+    if (hadExisting && existsSync(bakDst)) {
+      rmSync(bakDst, { recursive: true, force: true });
+    }
+    return { copied: countFiles(dst) };
+  } catch (e) {
+    if (existsSync(tmpDst)) {
+      try { rmSync(tmpDst, { recursive: true, force: true }); } catch {}
+    }
+    warn(`atomic 복사 실패 (${e.message}) — 개별 파일 복사 fallback 시도`);
+    try {
+      copyDirInPlace(src, dst);
+      return { copied: countFiles(dst) };
+    } catch (fallbackErr) {
+      warn(`fallback도 실패 (${src} → ${dst}): ${fallbackErr.message}`);
+      return { copied: 0 };
     }
   }
-  return { copied, skipped: false };
 }
 
 // ─── 1. hooks 동기화 ───
 log(`플랫폼: ${PLATFORM}  |  홈: ${HOME}  |  타겟: ${TARGET}`);
-const hooksResult = copyDir(join(REPO_ROOT, 'hooks'), join(TARGET, 'hooks'), { clean: true });
-log(`hooks/ 동기화 ${hooksResult.skipped ? '스킵 (src 비어있음)' : `완료 (${hooksResult.copied}개 파일)`}`);
+const hooksResult = copyDir(join(REPO_ROOT, 'hooks'), join(TARGET, 'hooks'));
+log(`hooks/ 동기화 완료 (${hooksResult.copied}개 파일)`);
 
 // ─── 2. skills 동기화 ───
-const skillsResult = copyDir(join(REPO_ROOT, 'skills'), join(TARGET, 'skills'), { clean: true });
-log(`skills/ 동기화 ${skillsResult.skipped ? '스킵 (src 비어있음)' : `완료 (${skillsResult.copied}개 파일)`}`);
+const skillsResult = copyDir(join(REPO_ROOT, 'skills'), join(TARGET, 'skills'));
+log(`skills/ 동기화 완료 (${skillsResult.copied}개 파일)`);
 
 // ─── 3. 전역 CLAUDE.md 동기화 ───
 const GLOBAL_CLAUDE_MD_TEMPLATE = `# 전역 Claude Code Instructions

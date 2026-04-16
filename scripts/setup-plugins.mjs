@@ -48,11 +48,14 @@ const PY_DEPS = [
 ];
 
 // ─── 유틸 ───
+// Windows는 `shell:true` 대신 `cmd.exe /d /s /c` 래핑 — DEP0190 경고 회피 + 인젝션 방지.
 function run(cmd, args, { capture = false } = {}) {
   const opts = capture
-    ? { encoding: 'utf8', shell: IS_WIN }
-    : { stdio: 'inherit', shell: IS_WIN };
-  const res = spawnSync(cmd, args, opts);
+    ? { encoding: 'utf8' }
+    : { stdio: 'inherit' };
+  const spawnCmd = IS_WIN ? 'cmd.exe' : cmd;
+  const spawnArgs = IS_WIN ? ['/d', '/s', '/c', cmd, ...args] : args;
+  const res = spawnSync(spawnCmd, spawnArgs, opts);
   return { status: res.status, stdout: res.stdout?.trim() };
 }
 
@@ -70,7 +73,9 @@ function getPipCommand() {
 }
 
 function getPythonCommand() {
-  for (const candidate of ['python3', 'python']) {
+  // Windows는 py 런처가 표준이고, `python`/`python3`은 MS Store 스텁(exit 49)일 수 있음.
+  // 우선순위: python3 → python → py (Windows 호환)
+  for (const candidate of ['python3', 'python', 'py']) {
     if (checkAvailable(candidate)) return candidate;
   }
   return null;
