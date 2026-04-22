@@ -541,12 +541,12 @@ async function main() {
   const packetPath = join(DELEGATION_DIR, `${agent}-${timestamp}.md`);
   writeFileSync(packetPath, packet, 'utf8');
 
-  console.log(`[delegate] 패킷 저장: ${packetPath}`);
-  console.log(`[delegate] ${cli} CLI 호출 중 (agent: ${agent})...`);
+  console.error(`[delegate] 패킷 저장: ${packetPath}`);
+  console.error(`[delegate] ${cli} CLI 호출 중 (agent: ${agent})...`);
 
   // DRY RUN: CLI 호출 없이 라우팅·패킷 저장까지만
   if (process.env.DELEGATE_DRY_RUN === '1') {
-    console.log(`[delegate] DRY RUN — CLI 호출 생략. 라우팅 완료: agent=${agent}, cli=${cli}`);
+    console.error(`[delegate] DRY RUN — CLI 호출 생략. 라우팅 완료: agent=${agent}, cli=${cli}`);
     process.exit(0);
   }
 
@@ -570,8 +570,7 @@ async function main() {
     if (!fallbackAvail) {
       // claude primary(planner/designer/curator) 또는 fallbackCli 미지정 → 종결
       console.error(`[delegate] CLAUDE PRIMARY FAILED. No fallback available (claude IS the fallback).`);
-      console.error(`  reason: ${summarizeErr(primaryErr)}`);
-      if (primaryErr.stderr) console.error(String(primaryErr.stderr).slice(0, 500));
+      console.error(`  reason: ${formatPrimaryError(primaryErr)}`);
 
       const feedbackLog = generateQualityFeedback(packet, '', cli, agent, task, attempts, primaryErr);
       try { writeFileSync(feedbackPath, feedbackLog, 'utf8'); } catch {}
@@ -580,22 +579,27 @@ async function main() {
     }
 
     // Fallback 경로 진입
-    console.error(`[delegate] PRIMARY FAILED: agent=${agent} cli=${cli} reason=${summarizeErr(primaryErr).slice(0, 160)}`);
+    console.error(`[delegate] PRIMARY FAILED: agent=${agent} cli=${cli} reason=${formatPrimaryError(primaryErr)}`);
     console.error(`[delegate] FALLBACK → ${agentDef.fallbackCli}. Claude가 ${agent} 역할로 수행.`);
 
     const fallbackPacket = injectFallbackContext(packet, agent, cli);
     usedCli = agentDef.fallbackCli;
 
+    // fallback 패킷 별도 파일로 저장 (진단용)
+    const fallbackPath = join(DELEGATION_DIR, `${agent}-${timestamp}-fallback.md`);
+    try { writeFileSync(fallbackPath, fallbackPacket, 'utf8'); } catch {}
+    console.error(`[delegate] fallback 패킷 저장: ${fallbackPath}`);
+
     try {
-      result = runCli('claude', ['-p', fallbackPacket], 'claude-fallback', attempts);
+      result = runCli('claude', ['-p'], 'claude-fallback', attempts, fallbackPacket);
     } catch (fallbackErr) {
       console.error(`[delegate] FALLBACK ALSO FAILED.`);
-      console.error(`  primary(${cli}) error:   ${summarizeErr(primaryErr).slice(0, 240)}`);
-      console.error(`  fallback(claude) error: ${summarizeErr(fallbackErr).slice(0, 240)}`);
+      console.error(`  primary(${cli}) error:   ${formatPrimaryError(primaryErr)}`);
+      console.error(`  fallback(claude) error: ${formatPrimaryError(fallbackErr)}`);
 
       const composite = new Error(`primary(${cli}) and fallback(claude) both failed`);
-      composite.primary = summarizeErr(primaryErr);
-      composite.fallback = summarizeErr(fallbackErr);
+      composite.primary = formatPrimaryError(primaryErr);
+      composite.fallback = formatPrimaryError(fallbackErr);
       const feedbackLog = generateQualityFeedback(packet, '', cli, agent, task, attempts, composite);
       try { writeFileSync(feedbackPath, feedbackLog, 'utf8'); } catch {}
       console.error(`[delegate] 시도 이력: ${feedbackPath}`);
@@ -613,16 +617,17 @@ async function main() {
     mkdirSync(dirname(historyPath), { recursive: true });
     writeFileSync(draftPath, result, 'utf8');
     writeFileSync(historyPath, result, 'utf8');
-    console.log(`[delegate] Gemini 결과 저장:`);
-    console.log(`  - 최신: ${draftPath}`);
-    console.log(`  - 이력: ${historyPath}`);
+    console.error(`[delegate] Gemini 결과 저장:`);
+    console.error(`  - 최신: ${draftPath}`);
+    console.error(`  - 이력: ${historyPath}`);
   }
 
   const feedbackLog = generateQualityFeedback(packet, result, usedCli, agent, task, attempts);
   writeFileSync(feedbackPath, feedbackLog, 'utf8');
-  console.log(`[delegate] 품질 피드백: ${feedbackPath}`);
+  console.error(`[delegate] 품질 피드백: ${feedbackPath}`);
 
-  console.log(`[delegate] 완료. (cli=${usedCli}${usedCli !== cli ? ' via fallback' : ''})`);
+  console.error(`[delegate] 완료. (cli=${usedCli}${usedCli !== cli ? ' via fallback' : ''})`);
+  // stdout은 오직 CLI 최종 응답 본문만 — 후속 pipe(jq 등) 가능
   console.log(result);
 }
 
@@ -631,20 +636,21 @@ async function main() {
 function executePrimary(primaryCli, agent, packet, attempts) {
   if (primaryCli === 'codex') {
     const codeDir = process.env.DELEGATE_CODE_DIR || 'frontend';
-    // spawnSync + 인자 배열 → shell escape 문제 원천 차단
-    return runCli('codex', ['exec', '--full-auto', '-C', codeDir, packet], 'codex-default', attempts);
+    // stdin 전달 — argv에는 플래그만. codex exec가 stdin에서 prompt 읽음.
+    return runCli('codex', ['exec', '--full-auto', '-C', codeDir], 'codex-default', attempts, packet);
   }
 
   if (primaryCli === 'gemini') {
     // agent별 모델 체인. 일시 에러는 체인 내부에서 모델 전환, 체인 전체 실패만 상위로.
     const chain = resolveGeminiChain(agent);
-    console.log(`[delegate] 모델 체인: ${chain.join(' → ')}`);
+    console.error(`[delegate] 모델 체인: ${chain.join(' → ')}`);
 
     let chainErr;
     for (const model of chain) {
       try {
-        console.log(`[delegate] 시도: gemini -m ${model}`);
-        return runCli('gemini', ['-m', model, '-p', packet], model, attempts);
+        console.error(`[delegate] 시도: gemini -m ${model}`);
+        // stdin 전달 — gemini CLI가 stdin에서 prompt 읽음.
+        return runCli('gemini', ['-m', model], model, attempts, packet);
       } catch (err) {
         chainErr = err;
         const last = attempts[attempts.length - 1];
@@ -658,7 +664,8 @@ function executePrimary(primaryCli, agent, packet, attempts) {
   }
 
   if (primaryCli === 'claude') {
-    return runCli('claude', ['-p', packet], 'claude-default', attempts);
+    // stdin 전달 — claude -p가 stdin에서 prompt 읽음.
+    return runCli('claude', ['-p'], 'claude-default', attempts, packet);
   }
 
   throw new Error(`지원하지 않는 CLI: ${primaryCli}`);
@@ -683,7 +690,9 @@ ${primaryCli} 실패로 Claude가 대신 수행한다.
 
 // ─── CLI 실행 + 에러 분류 ───
 
-function runCli(cmd, args, label, attemptsLog) {
+// runCli: 모든 CLI 호출은 stdin으로 패킷 전달 (argv는 짧은 플래그만).
+// Windows의 argv multi-line truncation 회피 + 패킷 크기 제한 사실상 해제.
+function runCli(cmd, args, label, attemptsLog, input) {
   const started = Date.now();
   const timeout =
     (process.env.DELEGATE_TIMEOUT_SEC ? Number(process.env.DELEGATE_TIMEOUT_SEC) * 1000 : 0) ||
@@ -696,6 +705,7 @@ function runCli(cmd, args, label, attemptsLog) {
   const spawnArgs = isWin ? ['/d', '/s', '/c', cmd, ...args] : args;
   const res = spawnSync(spawnCmd, spawnArgs, {
     encoding: 'utf8',
+    input: input ?? '',
     timeout,
     maxBuffer: 10 * 1024 * 1024,
   });
@@ -708,6 +718,8 @@ function runCli(cmd, args, label, attemptsLog) {
     const e = res.error;
     e.stderr = res.stderr;
     e.stdout = res.stdout;
+    e.exitCode = res.status;
+    e.signalName = res.signal;
     throw e;
   }
 
@@ -719,6 +731,8 @@ function runCli(cmd, args, label, attemptsLog) {
     err.killed = true;
     err.stderr = res.stderr;
     err.stdout = res.stdout;
+    err.exitCode = res.status;
+    err.signalName = res.signal;
     throw err;
   }
 
@@ -728,6 +742,8 @@ function runCli(cmd, args, label, attemptsLog) {
     err.code = res.status;
     err.stderr = res.stderr;
     err.stdout = res.stdout;
+    err.exitCode = res.status;
+    err.signalName = res.signal;
     throw err;
   }
 
@@ -740,11 +756,28 @@ function runCli(cmd, args, label, attemptsLog) {
     err.code = 'AUTH_OR_QUOTA';
     err.stderr = res.stderr;
     err.stdout = res.stdout;
+    err.exitCode = res.status;
+    err.signalName = res.signal;
     throw err;
   }
 
   attemptsLog.push({ ...entry, ok: true });
   return res.stdout;
+}
+
+// Windows cp949 mojibake 방어. non-printable+U+FFFD 비율 > 30%면 대체 메시지.
+function formatPrimaryError(err) {
+  const raw = (err?.stderr ? String(err.stderr) : (err?.message || String(err))).replace(/\s+/g, ' ').trim();
+  const total = raw.length;
+  if (total > 0) {
+    const bad = (raw.match(/[\x00-\x08\x0B-\x1F\x7F�]/g) || []).length;
+    if (bad / total > 0.3) {
+      const code = err?.exitCode ?? err?.code ?? 'n/a';
+      const sig = err?.signalName ?? 'n/a';
+      return `[decoded stderr unavailable; exit=${code} signal=${sig}]`;
+    }
+  }
+  return raw.slice(0, 240);
 }
 
 function isTransientError(err) {
