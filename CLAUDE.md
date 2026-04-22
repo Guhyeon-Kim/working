@@ -1,7 +1,7 @@
 # CLAUDE.md — Working Hub
 
 > HubWise/BiLevel 제외, 모든 작업의 중앙 허브 (회사/개인/일정)
-> Claude Code Dotfiles v6.4 | 최종 업데이트: 2026-04-16
+> Claude Code Dotfiles v5.9 | 최종 업데이트: 2026-04-16
 
 ---
 
@@ -60,7 +60,7 @@ bootstrap이 알아서 수행하는 것:
 리서치, 기획, 산출물 작성, 외부 서비스 연동, 프로젝트 관리를 여기서 수행한다.
 실제 코드 프로젝트는 필요 시 별도 repo를 생성한다.
 
-## 두 repo의 역할 분리 (v6.4 — 2026-04-16 명문화)
+## 두 repo의 역할 분리 (v5.9 — 2026-04-16 명문화)
 
 | repo | 용도 | 업데이트 |
 |---|---|---|
@@ -77,7 +77,7 @@ bootstrap이 알아서 수행하는 것:
 
 ```
 /workspaces/working/
-├── agents/              # 7개 핵심 에이전트 (.md) — v6.5에서 감축
+├── agents/              # 7개 핵심 에이전트 (.md) — v5.9에서 감축
 │   ├── delegation_workflow.md  # 오케스트레이션 허브 v5.3
 │   ├── memory/          # 누적 학습 (failure-cases, success-patterns 등)
 │   ├── legacy/          # 4개 아카이브 (backend/context/design/frontend)
@@ -102,7 +102,7 @@ bootstrap이 알아서 수행하는 것:
 7. **user-scope = 모든 프로젝트 공통 인프라** — `~/.claude/settings.json`과 user-scope MCP 서버는 Working Hub뿐 아니라 **하네스가 패치된 모든 프로젝트에 그대로 전파**된다. 따라서 Working Hub의 쓰임새만 보고 MCP/권한을 제거하면 안 된다. "하위 코드 프로젝트에서 필요한가?" 기준으로 판단할 것. 예: Playwright는 Working Hub에선 안 쓰지만 QA agent의 E2E BLOCKING 요건 때문에 user-scope에 상주해야 함.
 8. **크로스 플랫폼 필수** — 유저는 Codespace(Linux)와 Windows(VSCode/cmd) 양쪽에서 Claude Code를 사용한다. 훅은 `.mjs`(Node.js)만 작성, `.sh`는 Windows cmd에서 실행 불가. 경로는 `path.join()`, 환경변수는 OS별 문법 모두 안내. user-scope는 머신별 독립이므로 repo 업데이트 후 양쪽 환경에서 `node scripts/sync-user-scope.mjs` 실행이 동기화 방법.
 
-## 🎯 작업 라우팅 & 실행 원칙 (v6.5 — 2026-04-16 개정)
+## 🎯 작업 라우팅 & 실행 원칙 (v5.9 — 2026-04-16 개정)
 
 > **최상위 원칙**: 사용자는 목표만 말한다. Claude가 적합한 AI를 배정하고 결과를 정리한다.
 > 이 섹션은 이후 나오는 모든 라우팅/파이프라인 섹션보다 **우선권**을 가진다.
@@ -191,7 +191,7 @@ bootstrap이 알아서 수행하는 것:
 3. **어디에 결과가 있는지** (파일 경로, Notion 링크 등)
 4. **다음 할 일 제안** (필요 시)
 
-### 병렬 Worktree 전략 (v6.5 — 2026-04-16 신규)
+### 병렬 Worktree 전략 (v5.9 — 2026-04-16 신규)
 
 **언제 적용**:
 - 3개 이상 파일을 **서로 독립적으로** 수정할 때
@@ -209,7 +209,7 @@ bootstrap이 알아서 수행하는 것:
 
 ---
 
-## 코어 에이전트 7개 (v6.5 감축 완료)
+## 코어 에이전트 7개 (v5.9 감축 완료)
 
 고정 파이프라인이 아닌 **동적 팀 편성**. 아래 7명은 고유 관점이 있어 유지, 나머지는 `agents/legacy/`·`agents/project-specific/`로 이동.
 
@@ -408,7 +408,7 @@ ultraplan으로 진행할까요?
 - "배포 끝나면 알려줘" → `/loop` 제안
 - "매일 아침 PR 확인" → Scheduled Tasks 안내
 
-## 동적 팀 기본 (v6.5 — Agent Teams 진화형)
+## 동적 팀 기본 (v5.9 — Agent Teams 진화형)
 
 **기본 원칙**: 공통 역할은 에이전트 파일로 박지 않고 **작업마다 즉석 편성**. Working Hub에서든 프로젝트 repo에서든 동일.
 
@@ -428,7 +428,7 @@ ultraplan으로 진행할까요?
 - 고정: 7개 코어 에이전트 (pm, qa, security 등 고유 관점 있는 것만)
 - 동적: 공통 역할 (기획·구현·리뷰 등)은 스킬 템플릿 조합
 
-## Notion 자동 기록 원칙 (v6.5)
+## Notion 자동 기록 원칙 (v5.9)
 
 프로젝트 관련 작업이 완료되면 Claude는 **관련 Notion 페이지에 자동 기록**한다.
 
@@ -453,7 +453,7 @@ ultraplan으로 진행할까요?
 
 MCP 툴: `mcp__claude_ai_Notion__notion-create-pages` / `notion-update-page`.
 
-## 태블릿·모바일 Handoff 프로토콜 (v6.5)
+## 태블릿·모바일 Handoff 프로토콜 (v5.9)
 
 **플랫폼 조합**:
 - **Claude Code (VSCode extension)** — Codespace·Windows 로컬 양쪽
@@ -481,9 +481,9 @@ MCP 툴: `mcp__claude_ai_Notion__notion-create-pages` / `notion-update-page`.
 
 ## 🔄 자가 진화 로드맵 (v7 예고)
 
-v6.5 리서치(Gemini, 2026-04-16)에서 식별한 **우선순위 높은 미래 방향**. 이번 릴리즈엔 **원칙만 명시**, 실제 구현은 v7에서 단계별.
+v5.9 리서치(Gemini, 2026-04-16)에서 식별한 **우선순위 높은 미래 방향**. 이번 릴리즈엔 **원칙만 명시**, 실제 구현은 v7에서 단계별.
 
-| 항목 | 현재 v6.5 | v7 목표 |
+| 항목 | 현재 v5.9 | v7 목표 |
 |---|---|---|
 | **Semantic Routing** | 정량 임계치 + 의도 힌트 | 경량 LLM이 의도·컨텍스트량 분석 후 라우팅 (on-prompt-unified 고도화) |
 | **스킬 자가 생성** | evolving-rules 누적 + hookify 수동 트리거 | 반복 에러 감지 시 Claude가 **새 SKILL.md 자동 작성** 후 리포 반영 |
