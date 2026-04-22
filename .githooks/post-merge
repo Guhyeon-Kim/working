@@ -49,9 +49,25 @@ fi
 
 echo "[post-merge] hub: $HUB"
 
-# ── 1. user-scope sync (hooks, skills) ──
-node "$HUB/scripts/sync-user-scope.mjs" >/dev/null 2>&1 || \
-  echo "[post-merge] user-scope sync 일부 실패" >&2
+# ── 1. 상태 판정: fresh machine이면 full bootstrap, 아니면 sync만 ──
+# "실행 후 삭제" 원칙: sentinel 파일을 쓰지 않고 ~/.claude-config·hooks 실존으로
+# 상태를 판정한다. fresh machine에서 bootstrap이 1회 돌고 나면 다음 pull부턴
+# 같은 조건이 false가 돼 sync 경로만 타게 된다 (자기 자체가 one-shot처럼 동작).
+NEEDS_BOOTSTRAP=""
+if [ ! -d "$HOME/.claude-config" ]; then
+  NEEDS_BOOTSTRAP="dotfiles 없음"
+elif [ ! -d "$HOME/.claude/hooks" ] || [ -z "$(ls -A "$HOME/.claude/hooks" 2>/dev/null)" ]; then
+  NEEDS_BOOTSTRAP="~/.claude/hooks 비어있음"
+fi
+
+if [ -n "$NEEDS_BOOTSTRAP" ] && [ -f "$HUB/scripts/bootstrap.mjs" ]; then
+  echo "[post-merge] fresh machine 감지 ($NEEDS_BOOTSTRAP) — bootstrap --apply 실행" >&2
+  node "$HUB/scripts/bootstrap.mjs" --apply || \
+    echo "[post-merge] bootstrap 일부 실패 — 수동 확인: node scripts/bootstrap.mjs --apply" >&2
+else
+  node "$HUB/scripts/sync-user-scope.mjs" >/dev/null 2>&1 || \
+    echo "[post-merge] user-scope sync 일부 실패" >&2
+fi
 
 # 현재 repo가 hub 자체면 여기서 종료
 if [ "$REPO_ROOT" = "$HUB" ]; then

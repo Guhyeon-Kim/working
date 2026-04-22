@@ -2,7 +2,16 @@
 
 ## 새 머신 설치
 
-**Windows 로컬 PC (회사 / 집)**: 수동 설치 — **[docs/current/setup.md](docs/current/setup.md)** 참조. Node/CLI 3종·Notion integration·훅 활성화(`install-hooks.mjs`)까지 단계별.
+**Windows 회사 PC (최초 셋업)**: 수동 설치 — **[docs/current/setup.md](docs/current/setup.md)** 참조. Node/CLI 3종·Notion integration·훅 활성화까지 단계별.
+
+**Windows 집 PC (두 번째 환경)**: `bootstrap.mjs` 한 줄 경로 — **[docs/current/home-pc-sync.md](docs/current/home-pc-sync.md)** 참조.
+
+```bash
+git clone https://github.com/Guhyeon-Kim/working.git && cd working
+node scripts/bootstrap.mjs --apply
+```
+
+이후 `git pull` 시 `.githooks/post-merge`가 자동으로 `~/.claude/` 동기화 (sentinel·pending 파일 남기지 않음).
 
 **GitHub Codespaces (Linux)**: 자동 설치
 

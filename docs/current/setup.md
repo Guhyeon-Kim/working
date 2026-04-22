@@ -13,11 +13,11 @@
 
 | 환경 | OS | 권장 경로 |
 |---|---|---|
-| 회사 PC | Windows | **수동 경로** — 이 문서 §2~§6 |
-| 집 PC | Windows | **수동 경로** — 이 문서 §2~§6 (회사와 동일) |
+| 회사 PC (최초 셋업) | Windows | **수동 경로** — 이 문서 §2~§6 |
+| 집 PC (두 번째 환경) | Windows | **`bootstrap.mjs` 경로** — [home-pc-sync.md](home-pc-sync.md) |
 | GitHub Codespaces | Linux | **자동 경로** — 루트 `README.md`의 install.sh 한 줄 |
 
-즉 **로컬 PC 2대는 모두 Windows 수동 플로우**, Codespaces만 Linux 자동 플로우. Windows에서 `bash <(curl ...)`는 지원하지 않는다.
+즉 **로컬 PC 2대는 모두 Windows**, 회사 PC는 이 문서를 따라 수동으로 한 번 조립하고, 집 PC(및 이후 모든 두 번째 환경)는 [home-pc-sync.md](home-pc-sync.md) 의 `bootstrap.mjs --apply` 한 줄로 회사 PC 상태를 재현한다. Codespaces만 Linux 자동 플로우. Windows에서 `bash <(curl ...)`는 지원하지 않는다.
 
 ---
 
@@ -209,3 +209,13 @@ node scripts/delegate.mjs builder "Reply with just: OK"
 - **회사 PC / 집 PC (둘 다 Windows)**: Git Bash + npm global prefix = `%APPDATA%\npm`. `claude`·`codex`·`gemini` binary 모두 여기에 설치됨. PATH에 이 경로가 포함돼야 함.
 - **Codespaces (Linux)**: install.sh 자동 경로 유효. compute 한도 주의 (CLAUDE.md §2-7 참조). idle 5분·동시 1개 원칙.
 - **Figma / Playwright MCP**: 이 셋업 가이드 외 추가 단계 필요. 해당 프로젝트 합류 시 별도 참조.
+
+---
+
+## 11. 두 번째 환경(집 PC 등)에서 읽을 것
+
+이 문서는 **첫 셋업** 기준이다. 회사 PC에서 이미 조립한 상태를 집 PC에 재현하는 단축 경로는 [home-pc-sync.md](home-pc-sync.md) 를 따른다. 핵심:
+
+- `node scripts/bootstrap.mjs --apply` 한 줄로 dotfiles clone·user-scope sync·플러그인·`core.hooksPath` 설정까지 1회성 완결
+- 이후 `git pull` 은 [.githooks/post-merge](../../.githooks/post-merge) 가 자동으로 `sync-user-scope.mjs` 를 돌려 `~/.claude/` 를 동기화. **실행 후 어떤 sentinel·pending 파일도 남기지 않는다** (execute-then-done)
+- Notion 토큰, `git config --local user.email`, Codespaces 병행 주의 등 **집 PC 고유 체크리스트**는 해당 문서 §3
