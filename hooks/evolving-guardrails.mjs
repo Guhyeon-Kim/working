@@ -261,7 +261,7 @@ function handleStop() {
     if (rule.count >= 3) {
       process.stderr.write(
         `\u{1F6A8} [\uc9c4\ud654 \uaddc\uce59] \ube48\ubc1c \uc5d0\ub7ec: "${rule.pattern}" (${rule.count}\ud68c)\n` +
-          '\u2192 \ubc18\ubcf5 \ubc84\uadf8 \ub808\uc9c0\uc2a4\ud2b8\ub9ac(delegation_workflow.md \xa713)\uc5d0 \ub4f1\uc7ac\ud558\uc138\uc694.\n' +
+          '\u2192 \ubc18\ubcf5 \ubc84\uadf8 \ub808\uc9c0\uc2a4\ud2b8\ub9ac(agents/memory/failure-cases.md)\uc5d0 \ub4f1\uc7ac\ud558\uc138\uc694.\n' +
           '\u2192 /hookify:hookify \uaddc\uce59 \uc0dd\uc131\uc774 \uc2dc\uae09\ud569\ub2c8\ub2e4.\n'
       );
       continue;
