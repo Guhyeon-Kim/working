@@ -42,7 +42,9 @@ function posixHome() {
 }
 
 function expandPlaceholders(str) {
-  const home = homedir();
+  // JSON 문자열 내부에 들어갈 값이므로 Windows의 백슬래시는 이중화 필수.
+  // "C:\Users\x" → "C:\\Users\\x" (JSON escape). 파싱 후 실제 값은 단일 백슬래시.
+  const home = homedir().replace(/\\/g, '\\\\');
   return str
     .replace(/__HOME_POSIX__/g, posixHome())
     .replace(/__HOME__/g, home);
