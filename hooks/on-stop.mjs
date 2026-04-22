@@ -1,16 +1,23 @@
 #!/usr/bin/env node
 /**
- * Stop hook — 완료 기록 + 자동 품질 게이트 (v4.0 — Node.js 전환)
+ * Stop hook — 세션 종료 기록 + devlog payload 준비 (v5.0 — v6.0 하네스)
  *
- * on-stop.sh를 Node.js로 전환: Windows 한글 인코딩 문제 근본 해결
+ * 기존 기능 (v4.0 계승):
  * - 소요시간 계산 + activity-log 기록
  * - project-log.md 자동 기록
  * - 인코딩 게이트 (frontend 코드 변경 시)
  * - 설정 파일 변경 경고
+ *
+ * 신규 (v5.0):
+ * - .claude/pending-devlog.json 자동 작성 (CLAUDE.md §1-6 자동화)
+ * - git log/diff 기반 commits·files_changed 수집
+ * - files_changed 경로로 pattern(δ/α/β/γ) 추론 + confidence
+ * - project·category·result 후보값 제시 (Claude가 MCP 등록 시 참고)
+ * - 10분 이내 = requires_registration: false (CLAUDE.md §1-6)
  */
 
 import { readFileSync, writeFileSync, existsSync, appendFileSync, unlinkSync, readdirSync } from 'fs';
-import { join } from 'path';
+import { join, basename } from 'path';
 import { execFileSync } from 'child_process';
 
 const cwd = process.cwd();
@@ -44,6 +51,136 @@ function gitDiffNames() {
       cwd, encoding: 'utf8', timeout: 5000
     }).split('\n').filter(Boolean);
   } catch { return []; }
+}
+
+// ─── v5.0 pending-devlog 지원 ───
+
+function gitCommitsSince(sinceUnixTs) {
+  try {
+    const out = execFileSync('git', ['log', `--since=@${sinceUnixTs}`, '--format=%h'], {
+      cwd, encoding: 'utf8', timeout: 5000,
+    });
+    return out.split('\n').filter(Boolean);
+  } catch { return []; }
+}
+
+function gitDiffStatusFromCommit(oldestHash) {
+  // oldestHash^..HEAD 범위의 name-status를 A/M/D로 분류
+  const out = { added: [], modified: [], deleted: [] };
+  if (!oldestHash) return out;
+  try {
+    const raw = execFileSync('git', ['diff', '--name-status', `${oldestHash}^..HEAD`], {
+      cwd, encoding: 'utf8', timeout: 5000,
+    });
+    for (const line of raw.split('\n')) {
+      if (!line.trim()) continue;
+      const parts = line.split(/\s+/);
+      const code = parts[0];
+      const path = parts.slice(1).join(' ');
+      if (!path) continue;
+      if (code.startsWith('A')) out.added.push(path);
+      else if (code.startsWith('D')) out.deleted.push(path);
+      else out.modified.push(path); // M, R, C 등은 modified 취급
+    }
+  } catch { /* ignore */ }
+  return out;
+}
+
+function gitStatusShort() {
+  try {
+    return execFileSync('git', ['status', '--short'], {
+      cwd, encoding: 'utf8', timeout: 5000,
+    }).split('\n').filter(Boolean);
+  } catch { return []; }
+}
+
+function gitExitStatus() {
+  const lines = gitStatusShort();
+  return lines.length === 0 ? 'clean' : 'dirty';
+}
+
+// ─── 패턴·프로젝트·카테고리 추론 ───
+
+const HARNESS_PATH_PATTERNS = [
+  /^agents\//, /^hooks\//, /^scripts\//, /^skills\//, /^docs\/current\//,
+  /^docs\/asis\//, /^docs\/logs\//, /^CLAUDE\.md$/, /^settings\.json$/,
+  /^README\.md$/, /^\.gitignore$/, /^\.claudeignore$/,
+];
+
+const CONTENTS_PATH_PATTERNS = [
+  /^posts\//, /^contents\//, /^tistory\//, /^blog\//,
+];
+
+function isHarnessPath(p) {
+  return HARNESS_PATH_PATTERNS.some(re => re.test(p));
+}
+
+function isContentsPath(p) {
+  return CONTENTS_PATH_PATTERNS.some(re => re.test(p));
+}
+
+function inferPattern(filesChanged, elapsedSec) {
+  const all = [...filesChanged.added, ...filesChanged.modified, ...filesChanged.deleted];
+  const total = all.length;
+
+  if (total === 0) {
+    return { pattern: 'unknown', confidence: 'low' };
+  }
+
+  const harnessCount = all.filter(isHarnessPath).length;
+  const contentsCount = all.filter(isContentsPath).length;
+  const harnessRatio = harnessCount / total;
+  const contentsRatio = contentsCount / total;
+
+  if (harnessRatio >= 0.8) return { pattern: 'δ', confidence: 'high' };
+  if (harnessRatio >= 0.5) return { pattern: 'δ', confidence: 'medium' };
+  if (contentsRatio >= 0.5) return { pattern: 'γ', confidence: 'medium' };
+  if (total === 1 && elapsedSec < 1800) return { pattern: 'α', confidence: 'low' };
+  if (total >= 3) return { pattern: 'β', confidence: 'medium' };
+
+  return { pattern: 'unknown', confidence: 'low' };
+}
+
+function inferProject(cwdPath, filesChanged) {
+  const base = basename(cwdPath);
+  const baseMap = {
+    'working': '하네스',
+    'hubwise-invest': '허브와이즈',
+    'blevels': '블레벨',
+    'contents-auto': '컨텐츠자동화',
+    'contents-automation': '컨텐츠자동화',
+  };
+  if (baseMap[base]) return baseMap[base];
+
+  // 파일 경로에서 contents 징후
+  const all = [...filesChanged.added, ...filesChanged.modified];
+  if (all.some(isContentsPath)) return '컨텐츠자동화';
+  if (all.some(isHarnessPath)) return '하네스';
+
+  return 'unknown';
+}
+
+function inferCategory(taskName, pattern) {
+  const t = (taskName || '').toLowerCase();
+  if (pattern === 'δ') return '인프라';
+  if (/\b(fix|bug)\b|버그|버그수정/.test(t)) return '버그수정';
+  if (/refactor|리팩터|리팩토/.test(t)) return '리팩토링';
+  if (/\btest\b|테스트|qa/.test(t)) return 'QA';
+  if (/security|보안/.test(t)) return '보안';
+  return '기능';
+}
+
+function inferResult(exitStatus, brokenCount) {
+  if (brokenCount > 0) return '부분성공';
+  return exitStatus === 'clean' ? '성공' : '부분성공';
+}
+
+function writePendingDevlog(payload) {
+  const path = join(cwd, '.claude', 'pending-devlog.json');
+  try {
+    writeFileSync(path, JSON.stringify(payload, null, 2) + '\n', 'utf8');
+    return path;
+  } catch { return null; }
 }
 
 function countBrokenFiles(dir) {
@@ -136,6 +273,59 @@ function main() {
     process.stderr.write(`\uD83D\uDCCB [\uC124\uC815 \uBCC0\uACBD] \uC601\uD5A5 \uBC94\uC704 \uAC80\uD1A0 \uD544\uC694:\n`);
     configChanged.forEach(f => process.stderr.write(`    - ${f}\n`));
   }
+
+  // 4. pending-devlog.json 작성 (CLAUDE.md §1-6 자동화)
+  try {
+    const startedISO = new Date(started * 1000).toISOString();
+    const endedISO = new Date(TIMESTAMP * 1000).toISOString();
+    const elapsedMin = Math.max(0, Math.round(elapsed / 60));
+    const commits = gitCommitsSince(started);
+    const filesChanged = commits.length > 0
+      ? gitDiffStatusFromCommit(commits[commits.length - 1])
+      : { added: [], modified: diffFiles, deleted: [] };
+
+    const brokenForResult = (changedFrontend && existsSync(join(cwd, 'src')))
+      ? countBrokenFiles(join(cwd, 'src'))
+      : 0;
+
+    const { pattern, confidence } = inferPattern(filesChanged, elapsed);
+    const projectCandidate = inferProject(cwd, filesChanged);
+    const categoryCandidate = inferCategory(task, pattern);
+    const exitStatus = gitExitStatus();
+    const resultCandidate = inferResult(exitStatus, brokenForResult);
+    const requiresRegistration = elapsed >= 600; // 10분 이상만 필수
+
+    const payload = {
+      version: '1',
+      session: {
+        started: startedISO,
+        ended: endedISO,
+        elapsed_minutes: elapsedMin,
+      },
+      task: {
+        name: task,
+        source: 'current-task.tmp',
+      },
+      hints: {
+        pattern,
+        pattern_confidence: confidence,
+        project_candidate: projectCandidate,
+        category_candidate: categoryCandidate,
+        result_candidate: resultCandidate,
+      },
+      evidence: {
+        commits,
+        files_changed: filesChanged,
+        exit_status: exitStatus,
+      },
+      requires_registration: requiresRegistration,
+    };
+
+    const writtenPath = writePendingDevlog(payload);
+    if (writtenPath) {
+      process.stderr.write(`\u{1F4CC} [devlog 대기] pending-devlog.json 작성 — 다음 세션 시작 시 Notion 등록 요청됨\n`);
+    }
+  } catch { /* pending-devlog 실패는 silent (기존 기능 보호) */ }
 
   try { unlinkSync(TMP); } catch {}
   process.exit(0);

@@ -38,6 +38,8 @@ current-task.tmp
 .claude/current-task.tmp
 .claude/activity-log.md
 .claude/pending-hookify.json
+.claude/pending-devlog.json
+.claude/devlog-cache.json
 
 # Old backups
 *.bak
