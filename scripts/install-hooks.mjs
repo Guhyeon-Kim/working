@@ -21,7 +21,7 @@
  *   7. 병합 결과를 ~/.claude/settings.json에 쓰고 JSON.parse로 검증
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir, platform } from 'os';
 
@@ -142,6 +142,22 @@ function main() {
     process.exit(1);
   }
 
+  // 훅 파일 복사 대상 목록 미리보기
+  const hookSrcDir = join(REPO_ROOT, 'hooks');
+  const hookDstDir = join(USER_SETTINGS_DIR, 'hooks');
+  const scriptsSrcDir = join(REPO_ROOT, 'scripts');
+  const scriptsDstDir = join(USER_SETTINGS_DIR, 'scripts');
+  const hookFiles = existsSync(hookSrcDir)
+    ? readdirSync(hookSrcDir).filter(f => f.endsWith('.mjs'))
+    : [];
+  const pushHookSrc = join(scriptsSrcDir, 'post-push-hook.mjs');
+  const copyPushHook = existsSync(pushHookSrc);
+
+  console.log('[파일 복사 대상]');
+  console.log(`  hooks/*.mjs: ${hookFiles.length}개 → ${hookDstDir}`);
+  if (copyPushHook) console.log(`  scripts/post-push-hook.mjs → ${scriptsDstDir}`);
+  console.log('');
+
   if (DRY_RUN) {
     console.log('[DRY RUN — 쓰기 없음]');
     console.log(`머지 후 파일 크기: ${mergedStr.length} bytes`);
@@ -169,6 +185,21 @@ function main() {
     .flat()
     .reduce((acc, e) => acc + (e.hooks?.length || 0), 0);
   console.log(`[요약] ${lifecycleCount}개 라이프사이클, ${totalCommands}개 command 엔트리 등록됨.`);
+
+  // 7. 훅 파일 복사 (settings.json에 등록된 경로에 실제 파일을 배치)
+  if (hookFiles.length > 0) {
+    mkdirSync(hookDstDir, { recursive: true });
+    for (const f of hookFiles) {
+      copyFileSync(join(hookSrcDir, f), join(hookDstDir, f));
+    }
+    console.log(`[복사] ${hookFiles.length}개 훅 파일 → ${hookDstDir}`);
+  }
+  if (copyPushHook) {
+    mkdirSync(scriptsDstDir, { recursive: true });
+    copyFileSync(pushHookSrc, join(scriptsDstDir, 'post-push-hook.mjs'));
+    console.log(`[복사] scripts/post-push-hook.mjs → ${scriptsDstDir}`);
+  }
+
   console.log('[안내] 다음 세션부터 훅이 자동 발동합니다.');
 }
 
