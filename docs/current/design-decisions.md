@@ -271,6 +271,12 @@ const AGENTS = {
 
 **보류 사유**: 데이터 누적 없으면 리포트 의미 없음. 최소 2주 운영 후.
 
+### 4-9. `on-stop.mjs` `session.started` epoch 0 버그
+
+contents-auto 실측에서 `1970-01-01T00:33:46.000Z` 계산 확인.
+`current-task.tmp` 타임스탬프 파싱 실패 시 fallback이 `Date(0)` 반환 가능성.
+재현·수정 필요 (2026-04-22 contents-auto 통합 중 발견).
+
 ### 4-9. 키 관리 .env 자동 주입
 
 **필요성**: Notion 🔑 DB에서 조건부(프로젝트·환경) 쿼리 → `.env.local` 생성.
