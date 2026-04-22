@@ -2,13 +2,15 @@
 
 ## 새 머신 설치
 
-**Linux / macOS / Codespaces (자동)**:
+**Windows 로컬 PC (회사 / 집)**: 수동 설치 — **[docs/current/setup.md](docs/current/setup.md)** 참조. Node/CLI 3종·Notion integration·훅 활성화(`install-hooks.mjs`)까지 단계별.
+
+**GitHub Codespaces (Linux)**: 자동 설치
 
 ```
 bash <(curl -sL https://raw.githubusercontent.com/Guhyeon-Kim/dotfiles/main/install.sh)
 ```
 
-이 한 줄이면 끝. 아래가 자동으로 실행됨:
+자동으로 실행되는 것:
 
 1. CLI 설치 (claude-code, gemini, codex)
 2. `~/.claude-config/`에 이 레포 클론
@@ -16,7 +18,7 @@ bash <(curl -sL https://raw.githubusercontent.com/Guhyeon-Kim/dotfiles/main/inst
 4. `settings.json` 경로를 새 머신 `$HOME`으로 자동 변환
 5. 플러그인 9개 설치 (hookify, codex, telegram 등)
 
-**Windows (수동)** 또는 자동 설치 후 토큰·훅 활성화가 필요하면: **[docs/current/setup.md](docs/current/setup.md)** 참조. Windows 단계별 가이드 + Notion integration + `install-hooks.mjs`까지 포함.
+(Codespaces 자동 경로 후에도 MCP 토큰 연결은 수동 필요. 셋업 문서 §5 참조.)
 
 ## 설치 후 추가 작업
 

@@ -9,23 +9,25 @@
 
 ## 0. 환경 판단
 
-| 환경 | 권장 경로 |
-|---|---|
-| GitHub Codespaces (Linux) | **자동 경로** — 루트 `README.md`의 install.sh 한 줄 |
-| 집 PC (Linux / macOS) | **자동 경로** — 같은 install.sh |
-| 집 PC / 회사 PC (Windows) | **수동 경로** — 이 문서 §2~§6 |
+사용자의 실행 환경 3종:
 
-Windows에서 install.sh는 `curl`·`bash` 호환 이슈로 검증되지 않았다. 수동 경로를 기본으로 한다.
+| 환경 | OS | 권장 경로 |
+|---|---|---|
+| 회사 PC | Windows | **수동 경로** — 이 문서 §2~§6 |
+| 집 PC | Windows | **수동 경로** — 이 문서 §2~§6 (회사와 동일) |
+| GitHub Codespaces | Linux | **자동 경로** — 루트 `README.md`의 install.sh 한 줄 |
+
+즉 **로컬 PC 2대는 모두 Windows 수동 플로우**, Codespaces만 Linux 자동 플로우. Windows에서 `bash <(curl ...)`는 지원하지 않는다.
 
 ---
 
-## 1. 자동 경로 (Linux / macOS / Codespaces)
+## 1. 자동 경로 (Codespaces 전용)
 
 ```bash
 bash <(curl -sL https://raw.githubusercontent.com/Guhyeon-Kim/dotfiles/main/install.sh)
 ```
 
-이후 §5(Notion MCP)와 §6(훅 활성화)은 수동으로 한 번 더 확인할 것. install.sh가 모든 인증/토큰 단계를 자동화하지는 않는다.
+Codespaces Linux에서만 검증됨. 이후 §5(Notion MCP)와 §6(훅 활성화)은 수동으로 한 번 더 확인할 것. install.sh가 모든 인증/토큰 단계를 자동화하지는 않는다.
 
 ---
 
@@ -202,8 +204,8 @@ node scripts/delegate.mjs builder "Reply with just: OK"
 
 ---
 
-## 10. 부록: 이 세션에서 발견된 환경 차이
+## 10. 부록: 환경별 차이
 
-- **회사 PC (Windows)**: Git Bash + npm global prefix = `%APPDATA%\npm`. `claude` binary는 여기에 설치됨.
-- **Codespaces (Linux)**: install.sh 자동 경로 유효. compute 한도 주의 (CLAUDE.md §2-7 참조).
+- **회사 PC / 집 PC (둘 다 Windows)**: Git Bash + npm global prefix = `%APPDATA%\npm`. `claude`·`codex`·`gemini` binary 모두 여기에 설치됨. PATH에 이 경로가 포함돼야 함.
+- **Codespaces (Linux)**: install.sh 자동 경로 유효. compute 한도 주의 (CLAUDE.md §2-7 참조). idle 5분·동시 1개 원칙.
 - **Figma / Playwright MCP**: 이 셋업 가이드 외 추가 단계 필요. 해당 프로젝트 합류 시 별도 참조.
