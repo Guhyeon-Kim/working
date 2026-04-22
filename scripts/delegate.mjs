@@ -30,10 +30,17 @@
  * 환경변수:
  *   DELEGATE_DRY_RUN=1       CLI 실행 없이 라우팅·패킷 저장까지만 (테스트용)
  *   DELEGATE_CODE_DIR        codex 실행 디렉토리 (기본: frontend)
+ *   DELEGATE_TIMEOUT_SEC     단일 시도 타임아웃 (초, 기본: 300)
+ *   DELEGATE_TIMEOUT_MS      레거시 ms 단위 (DELEGATE_TIMEOUT_SEC 미지정 시만)
  *   GEMINI_MODEL_CHAIN       gemini 모델 체인 전체 override (콤마 구분)
  *   GEMINI_MODEL             gemini primary 모델 교체
  *   GEMINI_FALLBACK_MODEL    gemini secondary 모델 (deprecated)
- *   DELEGATE_TIMEOUT_MS      단일 시도 타임아웃 (기본: 300000)
+ *
+ * Fallback 규칙 (CLAUDE.md §1-1: CTO = Claude = 최종 책임):
+ *   primary CLI (codex/gemini) 실패 시 → claude로 전역 fallback
+ *   - 트리거: ENOENT/EACCES/EPERM, exit!=0, signal kill, timeout, auth/quota 패턴
+ *   - claude primary 에이전트(planner/designer/curator)는 fallback 없음 (claude IS the fallback)
+ *   - exit codes: 0=성공, 1=primary 실패 no-fallback, 3=fallback도 실패, 2=breaking change
  */
 
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'fs';
@@ -42,13 +49,13 @@ import { spawnSync } from 'child_process';
 
 // ─── v6.0 Agent Registry (CLAUDE.md §2-1 과 1:1 매핑) ───
 const AGENT_REGISTRY = {
-  researcher: { cli: 'gemini', role: '리서치·벤치마킹' },
-  planner:    { cli: 'claude', role: '요건정의·기획 고도화' },
-  copywriter: { cli: 'gemini', role: '마케팅·카피' },
-  designer:   { cli: 'claude', role: 'UI·정보구조' },
-  builder:    { cli: 'codex',  role: 'Front/Backend 구현' },
-  tester:     { cli: 'codex',  role: '테스트·디버깅' },
-  curator:    { cli: 'claude', role: '컨텍스트·로그·메모리' },
+  researcher: { cli: 'gemini', fallbackCli: 'claude', role: '리서치·벤치마킹' },
+  planner:    { cli: 'claude',                        role: '요건정의·기획 고도화' },
+  copywriter: { cli: 'gemini', fallbackCli: 'claude', role: '마케팅·카피' },
+  designer:   { cli: 'claude',                        role: 'UI·정보구조' },
+  builder:    { cli: 'codex',  fallbackCli: 'claude', role: 'Front/Backend 구현' },
+  tester:     { cli: 'codex',  fallbackCli: 'claude', role: '테스트·디버깅' },
+  curator:    { cli: 'claude',                        role: '컨텍스트·로그·메모리' },
 };
 
 // v5.3 → v6.0 breaking change: 구 target 호출 시 마이그레이션 메시지 + exit 2
@@ -120,7 +127,10 @@ ${rows}
 환경변수:
   DELEGATE_DRY_RUN=1       CLI 실행 없이 라우팅·패킷 저장까지만
   DELEGATE_CODE_DIR        codex 실행 디렉토리 (기본: frontend)
+  DELEGATE_TIMEOUT_SEC     단일 시도 타임아웃 (초, 기본: 300)
   GEMINI_MODEL_CHAIN       gemini 모델 체인 override (콤마 구분)
+
+Fallback: primary CLI 실패 시 claude로 자동 전환 (agent.fallbackCli 보유 시).
 `);
 }
 
@@ -541,81 +551,144 @@ async function main() {
   }
 
   const attempts = [];
+  const feedbackPath = join(DELEGATION_DIR, `${agent}-${timestamp}-feedback.md`);
   let result;
-  let finalErr;
+  let primaryErr;
+  let usedCli = cli;
 
+  // ─── 1) Primary 시도 ───
   try {
-    if (cli === 'codex') {
-      const codeDir = process.env.DELEGATE_CODE_DIR || 'frontend';
-      // spawnSync + 인자 배열 → shell escape 문제 원천 차단
-      result = runCli('codex', ['exec', '--full-auto', '-C', codeDir, packet], 'codex-default', attempts);
-    } else if (cli === 'gemini') {
-      // agent별 모델 체인 (researcher: preview→pro→flash, copywriter: pro→flash)
-      const chain = resolveGeminiChain(agent);
-      console.log(`[delegate] 모델 체인: ${chain.join(' → ')}`);
-
-      for (const model of chain) {
-        try {
-          console.log(`[delegate] 시도: gemini -m ${model}`);
-          result = runCli('gemini', ['-m', model, '-p', packet], model, attempts);
-          break;
-        } catch (err) {
-          const last = attempts[attempts.length - 1];
-          const transient = isTransientError(err);
-          if (last) { last.error = summarizeErr(err); last.transient = transient; }
-
-          if (!transient) throw err;
-          console.error(`[delegate] ${model} 일시 오류 → 다음 모델 시도: ${summarizeErr(err).slice(0, 140)}`);
-          finalErr = err;
-        }
-      }
-
-      if (!result) throw finalErr || new Error('Gemini 모델 체인 전체 실패');
-    } else if (cli === 'claude') {
-      // Claude Code CLI 비대화형 print 모드
-      result = runCli('claude', ['-p', packet], 'claude-default', attempts);
-    }
-
-    if (cli === 'gemini') {
-      const { mkdirSync } = await import('fs');
-      mkdirSync(DOCS_DIR, { recursive: true });
-
-      // 최신 결과는 gemini-draft.md (하위 호환), 히스토리는 timestamped 파일로 보존
-      const draftPath = join(DOCS_DIR, 'gemini-draft.md');
-      const historyPath = join(DOCS_DIR, `gemini-history/${timestamp}-${agent}.md`);
-      mkdirSync(dirname(historyPath), { recursive: true });
-      writeFileSync(draftPath, result, 'utf8');
-      writeFileSync(historyPath, result, 'utf8');
-      console.log(`[delegate] Gemini 결과 저장:`);
-      console.log(`  - 최신: ${draftPath}`);
-      console.log(`  - 이력: ${historyPath}`);
-    }
-
-    const feedbackLog = generateQualityFeedback(packet, result, cli, agent, task, attempts);
-    const feedbackPath = join(DELEGATION_DIR, `${agent}-${timestamp}-feedback.md`);
-    writeFileSync(feedbackPath, feedbackLog, 'utf8');
-    console.log(`[delegate] 품질 피드백: ${feedbackPath}`);
-
-    console.log(`[delegate] 완료.`);
-    console.log(result);
-
+    result = executePrimary(cli, agent, packet, attempts);
   } catch (err) {
-    const feedbackLog = generateQualityFeedback(packet, '', cli, agent, task, attempts, err);
-    const feedbackPath = join(DELEGATION_DIR, `${agent}-${timestamp}-feedback.md`);
-    try { writeFileSync(feedbackPath, feedbackLog, 'utf8'); } catch {}
-
-    console.error(`[delegate] ${cli} CLI 실행 실패:`, (err.message || String(err)).split('\n')[0]);
-    if (err.stderr) console.error(String(err.stderr).slice(0, 500));
-    console.error(`[delegate] 시도 이력은 ${feedbackPath}에 저장됨`);
-    process.exit(1);
+    primaryErr = err;
   }
+
+  // ─── 2) Fallback 판정 ───
+  if (primaryErr) {
+    const fallbackAvail = !!agentDef.fallbackCli;
+
+    if (!fallbackAvail) {
+      // claude primary(planner/designer/curator) 또는 fallbackCli 미지정 → 종결
+      console.error(`[delegate] CLAUDE PRIMARY FAILED. No fallback available (claude IS the fallback).`);
+      console.error(`  reason: ${summarizeErr(primaryErr)}`);
+      if (primaryErr.stderr) console.error(String(primaryErr.stderr).slice(0, 500));
+
+      const feedbackLog = generateQualityFeedback(packet, '', cli, agent, task, attempts, primaryErr);
+      try { writeFileSync(feedbackPath, feedbackLog, 'utf8'); } catch {}
+      console.error(`[delegate] 시도 이력: ${feedbackPath}`);
+      process.exit(1);
+    }
+
+    // Fallback 경로 진입
+    console.error(`[delegate] PRIMARY FAILED: agent=${agent} cli=${cli} reason=${summarizeErr(primaryErr).slice(0, 160)}`);
+    console.error(`[delegate] FALLBACK → ${agentDef.fallbackCli}. Claude가 ${agent} 역할로 수행.`);
+
+    const fallbackPacket = injectFallbackContext(packet, agent, cli);
+    usedCli = agentDef.fallbackCli;
+
+    try {
+      result = runCli('claude', ['-p', fallbackPacket], 'claude-fallback', attempts);
+    } catch (fallbackErr) {
+      console.error(`[delegate] FALLBACK ALSO FAILED.`);
+      console.error(`  primary(${cli}) error:   ${summarizeErr(primaryErr).slice(0, 240)}`);
+      console.error(`  fallback(claude) error: ${summarizeErr(fallbackErr).slice(0, 240)}`);
+
+      const composite = new Error(`primary(${cli}) and fallback(claude) both failed`);
+      composite.primary = summarizeErr(primaryErr);
+      composite.fallback = summarizeErr(fallbackErr);
+      const feedbackLog = generateQualityFeedback(packet, '', cli, agent, task, attempts, composite);
+      try { writeFileSync(feedbackPath, feedbackLog, 'utf8'); } catch {}
+      console.error(`[delegate] 시도 이력: ${feedbackPath}`);
+      process.exit(3);
+    }
+  }
+
+  // ─── 3) 결과 저장 (gemini만 draft/history) ───
+  if (usedCli === 'gemini') {
+    const { mkdirSync } = await import('fs');
+    mkdirSync(DOCS_DIR, { recursive: true });
+
+    const draftPath = join(DOCS_DIR, 'gemini-draft.md');
+    const historyPath = join(DOCS_DIR, `gemini-history/${timestamp}-${agent}.md`);
+    mkdirSync(dirname(historyPath), { recursive: true });
+    writeFileSync(draftPath, result, 'utf8');
+    writeFileSync(historyPath, result, 'utf8');
+    console.log(`[delegate] Gemini 결과 저장:`);
+    console.log(`  - 최신: ${draftPath}`);
+    console.log(`  - 이력: ${historyPath}`);
+  }
+
+  const feedbackLog = generateQualityFeedback(packet, result, usedCli, agent, task, attempts);
+  writeFileSync(feedbackPath, feedbackLog, 'utf8');
+  console.log(`[delegate] 품질 피드백: ${feedbackPath}`);
+
+  console.log(`[delegate] 완료. (cli=${usedCli}${usedCli !== cli ? ' via fallback' : ''})`);
+  console.log(result);
+}
+
+// ─── Primary 실행 (cli별 분기) ───
+
+function executePrimary(primaryCli, agent, packet, attempts) {
+  if (primaryCli === 'codex') {
+    const codeDir = process.env.DELEGATE_CODE_DIR || 'frontend';
+    // spawnSync + 인자 배열 → shell escape 문제 원천 차단
+    return runCli('codex', ['exec', '--full-auto', '-C', codeDir, packet], 'codex-default', attempts);
+  }
+
+  if (primaryCli === 'gemini') {
+    // agent별 모델 체인. 일시 에러는 체인 내부에서 모델 전환, 체인 전체 실패만 상위로.
+    const chain = resolveGeminiChain(agent);
+    console.log(`[delegate] 모델 체인: ${chain.join(' → ')}`);
+
+    let chainErr;
+    for (const model of chain) {
+      try {
+        console.log(`[delegate] 시도: gemini -m ${model}`);
+        return runCli('gemini', ['-m', model, '-p', packet], model, attempts);
+      } catch (err) {
+        chainErr = err;
+        const last = attempts[attempts.length - 1];
+        const transient = isTransientError(err);
+        if (last) { last.error = summarizeErr(err); last.transient = transient; }
+        if (!transient) throw err;  // 비일시 오류는 체인 중단 → cross-cli fallback로
+        console.error(`[delegate] ${model} 일시 오류 → 다음 모델 시도: ${summarizeErr(err).slice(0, 140)}`);
+      }
+    }
+    throw chainErr || new Error('Gemini 모델 체인 전체 실패');
+  }
+
+  if (primaryCli === 'claude') {
+    return runCli('claude', ['-p', packet], 'claude-default', attempts);
+  }
+
+  throw new Error(`지원하지 않는 CLI: ${primaryCli}`);
+}
+
+// ─── Fallback 컨텍스트 주입 ───
+
+function injectFallbackContext(packet, agent, primaryCli) {
+  // NOTE: 선두에 '---' 사용 금지 — claude CLI가 argv의 leading '---'를 unknown flag로 해석함.
+  const role = AGENT_REGISTRY[agent]?.role || agent;
+  const header = `[FALLBACK 컨텍스트]
+이 작업은 원래 ${primaryCli}가 담당할 ${agent} 역할(${role})이다.
+${primaryCli} 실패로 Claude가 대신 수행한다.
+해당 에이전트 프롬프트(agents/${agent}.md)의 역할·제약을 따르되,
+본인이 Claude임을 인지하고 필요 시 그에 맞게 보정하라.
+
+===
+
+`;
+  return header + packet;
 }
 
 // ─── CLI 실행 + 에러 분류 ───
 
 function runCli(cmd, args, label, attemptsLog) {
   const started = Date.now();
-  const timeout = Number(process.env.DELEGATE_TIMEOUT_MS) || 300000;
+  const timeout =
+    (process.env.DELEGATE_TIMEOUT_SEC ? Number(process.env.DELEGATE_TIMEOUT_SEC) * 1000 : 0) ||
+    Number(process.env.DELEGATE_TIMEOUT_MS) ||
+    300000;
 
   // Windows: `shell:true` 대신 `cmd.exe /d /s /c` 래핑 (DEP0190 회피 + 인젝션 방지).
   const isWin = process.platform === 'win32';
@@ -629,6 +702,7 @@ function runCli(cmd, args, label, attemptsLog) {
 
   const entry = { label, ms: Date.now() - started, status: res.status, signal: res.signal };
 
+  // spawn 에러 (ENOENT 등) — timeout도 error.code === 'ETIMEDOUT' 또는 signal=SIGTERM으로 들어옴
   if (res.error) {
     attemptsLog.push({ ...entry, ok: false });
     const e = res.error;
@@ -636,10 +710,34 @@ function runCli(cmd, args, label, attemptsLog) {
     e.stdout = res.stdout;
     throw e;
   }
+
+  // signal kill (timeout 포함)
+  if (res.signal) {
+    attemptsLog.push({ ...entry, ok: false });
+    const err = new Error(`${cmd} killed by signal ${res.signal}`);
+    err.code = res.signal;
+    err.killed = true;
+    err.stderr = res.stderr;
+    err.stdout = res.stdout;
+    throw err;
+  }
+
   if (res.status !== 0) {
     attemptsLog.push({ ...entry, ok: false });
     const err = new Error(`${cmd} exited with status ${res.status}`);
     err.code = res.status;
+    err.stderr = res.stderr;
+    err.stdout = res.stdout;
+    throw err;
+  }
+
+  // exit 0 이지만 stdout 비어있고 stderr가 auth/quota 패턴 → 실질 실패 처리
+  const stdoutTrim = (res.stdout || '').trim();
+  const stderrLow = (res.stderr || '').toLowerCase();
+  if (stdoutTrim.length === 0 && /authentication|unauthorized|\b401\b|quota|rate.?limit/.test(stderrLow)) {
+    attemptsLog.push({ ...entry, ok: false });
+    const err = new Error(`${cmd} reported auth/quota failure on empty output`);
+    err.code = 'AUTH_OR_QUOTA';
     err.stderr = res.stderr;
     err.stdout = res.stdout;
     throw err;
