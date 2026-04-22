@@ -635,9 +635,14 @@ async function main() {
 
 function executePrimary(primaryCli, agent, packet, attempts) {
   if (primaryCli === 'codex') {
-    const codeDir = process.env.DELEGATE_CODE_DIR || 'frontend';
+    // -C는 DELEGATE_CODE_DIR이 명시되고 실제 존재할 때만. 기본값은 CWD.
     // stdin 전달 — argv에는 플래그만. codex exec가 stdin에서 prompt 읽음.
-    return runCli('codex', ['exec', '--full-auto', '-C', codeDir], 'codex-default', attempts, packet);
+    const codexArgs = ['exec', '--full-auto'];
+    const codeDir = process.env.DELEGATE_CODE_DIR;
+    if (codeDir && existsSync(join(PROJECT_ROOT, codeDir))) {
+      codexArgs.push('-C', codeDir);
+    }
+    return runCli('codex', codexArgs, 'codex-default', attempts, packet);
   }
 
   if (primaryCli === 'gemini') {
@@ -649,8 +654,9 @@ function executePrimary(primaryCli, agent, packet, attempts) {
     for (const model of chain) {
       try {
         console.error(`[delegate] 시도: gemini -m ${model}`);
-        // stdin 전달 — gemini CLI가 stdin에서 prompt 읽음.
-        return runCli('gemini', ['-m', model], model, attempts, packet);
+        // gemini는 -p 플래그가 필수(없으면 interactive). -p ' '로 non-interactive 트리거하고
+        // 실제 prompt는 stdin으로 전달 (help: "Appended to input on stdin (if any)").
+        return runCli('gemini', ['-m', model, '-p', ' '], model, attempts, packet);
       } catch (err) {
         chainErr = err;
         const last = attempts[attempts.length - 1];
