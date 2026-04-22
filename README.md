@@ -2,6 +2,8 @@
 
 ## 새 머신 설치
 
+**Linux / macOS / Codespaces (자동)**:
+
 ```
 bash <(curl -sL https://raw.githubusercontent.com/Guhyeon-Kim/dotfiles/main/install.sh)
 ```
@@ -13,6 +15,8 @@ bash <(curl -sL https://raw.githubusercontent.com/Guhyeon-Kim/dotfiles/main/inst
 3. `~/.claude/`에 agents, hooks, skills, scripts 심링크
 4. `settings.json` 경로를 새 머신 `$HOME`으로 자동 변환
 5. 플러그인 9개 설치 (hookify, codex, telegram 등)
+
+**Windows (수동)** 또는 자동 설치 후 토큰·훅 활성화가 필요하면: **[docs/current/setup.md](docs/current/setup.md)** 참조. Windows 단계별 가이드 + Notion integration + `install-hooks.mjs`까지 포함.
 
 ## 설치 후 추가 작업
 
