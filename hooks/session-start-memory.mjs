@@ -57,6 +57,60 @@ async function main() {
   const agentsMemory = join(cwd, '.claude', 'agents', 'memory');
   const messages = [];
 
+  // 0-a. pending-devlog.json — 전 세션 devlog 등록 대기 (CLAUDE.md §1-6)
+  //      이 블록은 무조건 stderr로 출력되어야 함 (Claude의 필수 액션)
+  const pendingDevlogPath = join(claudeDir, 'pending-devlog.json');
+  const pendingDevlog = safeReadJSON(pendingDevlogPath);
+  if (pendingDevlog) {
+    const taskName = pendingDevlog.task?.name || '(task 이름 없음)';
+    const requires = pendingDevlog.requires_registration;
+    process.stderr.write('\n');
+    process.stderr.write('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    process.stderr.write('⚠ 전 세션 devlog 미등록 (CLAUDE.md §1-6)\n');
+    process.stderr.write('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    process.stderr.write(`task: ${taskName}\n`);
+    process.stderr.write(`requires_registration: ${requires}\n`);
+    process.stderr.write('payload: .claude/pending-devlog.json\n');
+    if (requires) {
+      process.stderr.write('\n【필수 액션 — 사용자 다른 요청 전에 반드시 수행】\n');
+      process.stderr.write('1. .claude/pending-devlog.json 읽기\n');
+      process.stderr.write('2. Notion MCP로 💻 개발 노트 DB에 v2.0 엔트리 등록\n');
+      process.stderr.write('   (data source: collection://1212c0d1-40ed-425e-915f-eedca3577add)\n');
+      process.stderr.write('3. hints 필드는 참고만. 최종 project/pattern/카테고리는 CEO 기준으로 판단\n');
+      process.stderr.write('4. 등록 성공 후 .claude/pending-devlog.json 파일 삭제\n');
+      process.stderr.write('5. 실패 시 파일 유지 + CEO에게 보고\n');
+      process.stderr.write('이 액션이 이 세션의 첫 응답이어야 합니다.\n');
+    } else {
+      process.stderr.write('\nrequires_registration=false (10분 이내 소소한 세션). CEO가 명시적으로 요청하면 등록, 아니면 파일 삭제해도 됨.\n');
+    }
+    process.stderr.write('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n');
+  }
+
+  // 0-b. devlog-cache.json — 최근 5건 캐시 (CLAUDE.md §1-2 단계 4)
+  const devlogCachePath = join(claudeDir, 'devlog-cache.json');
+  const devlogCache = safeReadJSON(devlogCachePath);
+  const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  if (devlogCache && devlogCache.fetched_at) {
+    const fetchedTs = Date.parse(devlogCache.fetched_at);
+    const age = now - fetchedTs;
+    const fresh = age < CACHE_TTL_MS;
+    const entries = Array.isArray(devlogCache.entries) ? devlogCache.entries : [];
+    if (fresh && entries.length > 0) {
+      messages.push(`📖 [devlog 캐시 — ${Math.round(age / 3600000)}h 전 갱신] 최근 ${entries.length}건:`);
+      for (const e of entries.slice(0, 5)) {
+        const improve = e['다음개선_요약'] || e.다음개선_요약 || '';
+        messages.push(`  - ${e.title || '(제목없음)'} [${e.pattern || '?'}/${e.result || '?'}]`);
+        if (improve) messages.push(`    → 다음개선: ${improve}`);
+      }
+      messages.push('  ↑ 오늘 주의할 점 3줄은 이 entries를 근거로 첫 응답에 요약.');
+    } else {
+      messages.push(`⏰ [devlog 캐시 만료] ${Math.round(age / 3600000)}h 전. Notion MCP로 최근 5건 갱신 + .claude/devlog-cache.json 저장 요망.`);
+    }
+  } else {
+    messages.push('📥 [devlog 캐시 없음] Notion MCP로 최근 5건 조회 후 .claude/devlog-cache.json 작성 요망 (24h TTL).');
+  }
+
   // 1. evolving-rules.json — 반복 에러 패턴 로딩
   const rulesPath = join(agentsMemory, 'evolving-rules.json');
   const rules = safeReadJSON(rulesPath);
