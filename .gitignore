@@ -27,7 +27,7 @@ projects/
 # Temp files
 *.tmp
 activity-log.md
-project-log.md
+/project-log.md
 quality-gate-log.md
 current-task.tmp
 
