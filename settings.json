@@ -51,6 +51,12 @@
             "command": "node \"__HOME__/.claude/hooks/session-start-memory.mjs\"",
             "timeout": 10,
             "statusMessage": "메모리 로딩 중..."
+          },
+          {
+            "type": "command",
+            "command": "node \"__HOME__/.claude/hooks/harness-drift-check.mjs\"",
+            "timeout": 10,
+            "statusMessage": "하네스 drift 감지..."
           }
         ]
       }
@@ -77,6 +83,17 @@
             "command": "node \"__HOME__/.claude/hooks/enforce-delegation.mjs\"",
             "timeout": 5,
             "statusMessage": "위임 규칙 검증 중..."
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"__HOME__/.claude/hooks/pre-secret-scan.mjs\"",
+            "timeout": 5,
+            "statusMessage": "시크릿 스캔 중..."
           }
         ]
       }
