@@ -393,3 +393,20 @@ docs/
 |---|---|---|
 | 6.0 | 2026-04-22 | 15 에이전트 → 7, 동적 편성, docs 3폴더, Notion 중심 |
 | 5.3 | (v5.x 시리즈) | 15 에이전트 + 5단계 파이프라인. `docs/asis/CLAUDE-v5.3.md` 참조 |
+
+---
+
+## 8. 두 번째 환경(집 PC 등) 진입 시
+
+집 PC·신규 Windows 환경에서 working repo를 처음 열 때의 **단축 경로**. 회사 PC는 이미 `setup.md` 대로 조립된 상태라고 가정.
+
+```bash
+git clone https://github.com/Guhyeon-Kim/working.git && cd working
+node scripts/bootstrap.mjs --apply
+```
+
+이 한 줄로 dotfiles clone · user-scope sync · 플러그인 · `core.hooksPath = .githooks` 까지 완결. 이후 `git pull` 하면 [.githooks/post-merge](.githooks/post-merge) 가 자동으로 `~/.claude/` 를 동기화한다 — sentinel·pending 파일 없이 "실행 후 상태만 남기고 트리거는 없는" 방식 (fresh machine이면 bootstrap 전체, 건강하면 sync-user-scope만).
+
+**첫 수동 실행 1회는 불가피**: clone 직후엔 git이 아직 `.githooks` 를 모르므로 post-merge가 발동하지 않는다. `bootstrap.mjs --apply` 가 `core.hooksPath` 를 박아준 뒤부턴 자동.
+
+상세·트러블슈팅: [docs/current/home-pc-sync.md](docs/current/home-pc-sync.md)
